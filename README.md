@@ -92,20 +92,20 @@ If there are any problems with using this repository, feel free to file an issue
 
 Such that the python/bash scripts within this repository work properly, you must call them from the root directory of this repository.
 
-| File                   | Description                                                                 |
-| -                      | -                                                                           |
-| analysis               | scripts to perform analyses                                                 |
-| datasets.py            | dataset loading                                                             |
-| lifelong_learning.py   | lifelong learning module                                                    |
-| drift_magnitude.py     | drift magnitude module                                                      |
-| preprocess_dataset.py  | Preprocess a Lifelong Learning Graph Dataset                                |
-| experiments            | Bash scripts to reproduce experiments                                       |
-| scripts                | Other bash scripts to preprocess/compute tdiff distribution                 |
-| models                 | GNN implementations                                                         |
-| README.md              | this file                                                                   |
-| requirements.txt       | dependencies                                                                |
-| run_experiment.py      | main entry point for running a single experiment                            |
-| run_experiment.py      | main entry point for running a single experiment **with preprocessed data** |
-| tabularize.py          | aggregate results into table                                                |
-| tabularize.py          | aggregate results into table including Forward Transfer computation         |
-| visualize.py           | visualize results                                                           |
+| File                              | Description                                                                 |
+| -                                 | -                                                                           |
+| analysis                          | scripts to perform analyses                                                 |
+| datasets.py                       | dataset loading                                                             |
+| lifelong_learning.py              | lifelong learning module                                                    |
+| drift_magnitude.py                | drift magnitude module                                                      |
+| preprocess_dataset.py             | Preprocess a Lifelong Learning Graph Dataset                                |
+| experiments                       | Bash scripts to reproduce experiments                                       |
+| scripts                           | Other bash scripts to preprocess/compute tdiff distribution                 |
+| models                            | GNN implementations                                                         |
+| README.md                         | this file                                                                   |
+| requirements.txt                  | dependencies                                                                |
+| run_experiment.py                 | main entry point for running a single experiment                            |
+| run_experiment.py                 | main entry point for running a single experiment **with preprocessed data** |
+| tabularize.py                     | aggregate results into table                                                |
+| tabularize_forward_transfer.py    | aggregate results into table including Forward Transfer computation         |
+| visualize.py                      | visualize results                                                           |
