@@ -98,7 +98,7 @@ If there are any problems with using this repository, feel free to file an issue
 | datasets.py                       | dataset loading                                                             |
 | lifelong_learning.py              | lifelong learning module                                                    |
 | drift_magnitude.py                | drift magnitude module                                                      |
-| preprocess_dataset.py             | Preprocess a Lifelong Learning Graph Dataset                                |
+| preprocess_dataset.py             | Create a Lifelong Learning Graph Dataset by preprocessing tasks             |
 | experiments                       | Bash scripts to reproduce experiments                                       |
 | scripts                           | Other bash scripts to preprocess/compute tdiff distribution                 |
 | models                            | GNN implementations                                                         |
