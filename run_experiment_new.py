@@ -611,9 +611,8 @@ if __name__ == '__main__':
                         help="Number of seed nodes per batch for sampling")
     parser.add_argument('--test_batch_size', type=int, default=10000,
                         help="Test batch size (testing is done on cpu)")
-    parser.add_argument('--num_workers', type=int, default=8, help="How many threads to use for sampling")
     # parser.add_argument('--limited_pretraining', default=False, action="store_true",
-    #                     help="Perform pretraining on the first history window.")
+    #                     help="Perform pretraining on the first history window.") 
     parser.add_argument('--decay', default=None, type=float, help="Paramater for exponential decay loss smoothing")
     parser.add_argument('--save_intermediate', default=False, action="store_true",
                         help="Save intermediate results per year")

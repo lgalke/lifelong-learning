@@ -61,9 +61,9 @@ python3 visualize.py --style "window size %RF" --hue model --col dataset --row s
 
 where results.csv is the file where you've aggregated the results. You can also provide multiple results files, then they will be concatenated before plotting.
 
-## Preprocessing tasks for faster execution
+## Preprocessing tasks for multiple experiments
 
-Construct tasks dynamically may take some time during experiments.
+Constructing tasks dynamically may take some time during experiments.
 The tasks can be preprocessed with the script `preprocess_datasets.py`
 **Important:** the Argument t_zero must be one task **before** the first evaluation task, i.e., if you want to start evaluation at time 2004, you must preprocess tasks starting at time 2003.
 
@@ -77,7 +77,7 @@ In `scripts/preprocess_all_datasets.bash`, you find a shorthand to preprocess al
 This shorthand should be started with the repository's root as working directory and expects the directory structure of `data/` as described above.
 
 Then, you need to use the version of the run script that uses preprocessed tasks, namely `run_experiment_new.py`.
-The interface of the script is similar to the one of `run_experiment.py`. 
+The interface of the script is nearly the same as the one of `run_experiment.py`. 
 One difference is that reproducing our ablation study for comparison with once-trained static models is only possible with `run_experiment.py`.
 
 ## Full reproduction of the paper's experiments
