@@ -82,14 +82,15 @@ One difference is that reproducing our ablation study for comparison with once-t
 
 ## Full reproduction of the paper's experiments
 
-In the `experiments/` directory, you find bash scripts to re-run all our experiments (this may take a while).
-Such that all bash scripts within this repository work properly, you must call them from the root directory of this repository.
+In the `experiments/` directory, you find bash scripts to re-run all our experiments.
 
 ## Issues?
 
 If there are any problems with using this repository, feel free to file an issue.
 
 ## File Descriptions
+
+Such that the python/bash scripts within this repository work properly, you must call them from the root directory of this repository.
 
 | File                   | Description                                                                 |
 | -                      | -                                                                           |
