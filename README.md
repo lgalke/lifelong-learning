@@ -86,11 +86,11 @@ In the `experiments/` directory, you find bash scripts to re-run all our experim
 
 ## Issues?
 
+**Note:** Such that the python/bash scripts within this repository work properly, you must call them from the root directory of this repository.
+
 If there are any problems with using this repository, feel free to file an issue.
 
 ## File Descriptions
-
-Such that the python/bash scripts within this repository work properly, you must call them from the root directory of this repository.
 
 | File                              | Description                                                                 |
 | -                                 | -                                                                           |
@@ -105,7 +105,7 @@ Such that the python/bash scripts within this repository work properly, you must
 | README.md                         | this file                                                                   |
 | requirements.txt                  | dependencies                                                                |
 | run_experiment.py                 | main entry point for running a single experiment                            |
-| run_experiment.py                 | main entry point for running a single experiment **with preprocessed data** |
+| run_experiment_new.py             | main entry point for running a single experiment **with preprocessed data** |
 | tabularize.py                     | aggregate results into table                                                |
 | tabularize_forward_transfer.py    | aggregate results into table including Forward Transfer computation         |
 | visualize.py                      | visualize results                                                           |
