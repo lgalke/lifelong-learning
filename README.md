@@ -1,6 +1,6 @@
 # Lifelong Learning of Graph Neural Networks for Open-World Node Classification
 
-**Paper:** Lukas Galke, Benedikt Franke, Tobias Zielke, Ansgar Scherp: **Lifelong Learning of Graph Neural Networks for Open-World Node Classification**, to appear in: IJCNN 2021.
+**Paper:** Lukas Galke, Benedikt Franke, Tobias Zielke, Ansgar Scherp: **Lifelong Learning of Graph Neural Networks for Open-World Node Classification**, to appear in: IJCNN 2021. [arXiv](https://arxiv.org/abs/2006.14422)
 
 ## Installation
 
