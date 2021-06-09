@@ -149,21 +149,7 @@ def build_model(args, in_feats, n_hidden, n_classes, device, n_layers=1, backend
         else:
             raise NotImplementedError(f"Unknown model spec 'f{model_spec} for backend {backend}")
     elif backend == 'dgl': # DGL models
-        if model_spec == 'gcn_cv_sc':
-            infer_device = torch.device("cpu")  # for sampling
-            train_model = GCNSampling(in_feats,
-                                      n_hidden,
-                                      n_classes,
-                                      2,
-                                      F.relu,
-                                      args.dropout).to(device)
-            infer_model = GCNInfer(in_feats,
-                                   args.n_hidden,
-                                   n_classes,
-                                   2,
-                                   F.relu)
-            model = (train_model, infer_model)
-        elif model_spec == 'gs-mean':
+        if model_spec == 'gs-mean':
             model = GraphSAGE(in_feats, n_hidden, n_classes,
                               n_layers, F.relu, args.dropout,
                               'mean').to(device)
@@ -172,16 +158,6 @@ def build_model(args, in_feats, n_hidden, n_classes, device, n_layers=1, backend
                         n_layers, F.relu, args.dropout).to(device)
         elif model_spec == 'mostfrequent':
             model = MostFrequentClass()
-        # elif model_spec == 'egcn':
-        #     if n_layers != 1:
-        #         print("Warning, EGCN doesn't respect n_layers")
-        #     egcn_args = egcn_utils.Namespace({'feats_per_node': in_feats,
-        #                                       'layer_1_feats': n_hidden,
-        #                                       'layer_2_feats': n_classes})
-        #     # TODO we could use a classification layer on top
-        #     # but we don't do this for the other models,
-        #     # therefore layer 2 dimension equals n_classes
-        #     model = EGCN(egcn_args, torch.nn.RReLU(), device=device, skipfeats=False)
         elif model_spec == 'gat':
             print("Warning, GAT doesn't respect n_layers")
             heads = [8, args.gat_out_heads]  # Fixed head config
