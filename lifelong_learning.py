@@ -53,6 +53,11 @@ def _check_graph_args(dgl_graph, edge_index, edge_attr):
         backend = 'dgl'
     return backend
 
+# def _subsample_mask(self, mask, ratio):
+#     """ Subsamples the training set, does not create overlap with test"""
+#     subsample_mask = torch.rand(mask.size()) < ratio
+#     new_mask = mask * subsample_mask
+#     return new_mask
 
 class NodeClassificationTask:
     def __init__(self, x, y, dgl_graph=None, edge_index=None, edge_attr=None, num_nodes=None,
@@ -70,6 +75,9 @@ class NodeClassificationTask:
         self.train_mask = torch.as_tensor(train_mask, dtype=torch.bool)
         self.test_mask = torch.as_tensor(test_mask, dtype=torch.bool)
 
+        assert self.task_ids.size(0) == self.num_nodes
+        assert self.train_mask.size(0) == self.num_nodes
+        assert self.test_mask.size(0) == self.num_nodes
 
     def set_all_train_(self):
         """ Compose a subgraph on the basis of the train set"""
@@ -103,11 +111,13 @@ class NodeClassificationTask:
 
 
     def save(self, path):
+        """ Saves the task as pickle """
         with open(path, 'wb') as fhandle:
             pickle.dump(self, fhandle)
 
     @staticmethod
     def load(path):
+        """ Loads the pickle'd task """
         with open(path, 'rb') as fhandle:
             obj = pickle.load(fhandle)
         assert isinstance(obj, NodeClassificationTask)
@@ -121,7 +131,8 @@ def _get_node_mask(task_ids, current, cumulate=0):
     return ((task_ids <= current) & (task_ids >= (current - cumulate)))
 
 
-def _make_subgraph_task_dgl(task_ids, current, x, y, dgl_graph, cumulate=0):
+def _make_subgraph_task_dgl(task_ids, current, x, y, dgl_graph, cumulate=0,
+                            global_train_mask=None):
     subg_mask = _get_node_mask(task_ids, current, cumulate=cumulate)
     # Create subgraph
     subg_nodes = torch.arange(dgl_graph.number_of_nodes())[subg_mask]
@@ -130,9 +141,15 @@ def _make_subgraph_task_dgl(task_ids, current, x, y, dgl_graph, cumulate=0):
     subg_features = x[subg_mask]
     subg_labels = y[subg_mask]
     subg_task_ids = task_ids[subg_mask]
+
+
     # Create masks
     train_mask = subg_task_ids < current
     test_mask = subg_task_ids == current
+
+    if global_train_mask is not None:
+        train_mask = train_mask * global_train_mask[subg_mask]
+
     # Number of nodes
     subg_num_nodes = subg.number_of_nodes()
 
@@ -145,7 +162,8 @@ def _make_subgraph_task_dgl(task_ids, current, x, y, dgl_graph, cumulate=0):
             train_mask=train_mask, test_mask=test_mask,
             task_id=current)
 
-def _make_subgraph_task_geometric(task_ids, current, x, y, edge_index, edge_attr=None, cumulate=0):
+def _make_subgraph_task_geometric(task_ids, current, x, y, edge_index, edge_attr=None, cumulate=0,
+                                  global_train_mask=None):
     subg_mask = _get_node_mask(task_ids, current, cumulate=cumulate)
     subg_edge_index, subg_edge_attr = tg.utils.subgraph(subg_mask,
             edge_index, edge_attr=edge_attr,
@@ -159,6 +177,9 @@ def _make_subgraph_task_geometric(task_ids, current, x, y, edge_index, edge_attr
     train_mask = subg_task_ids < current
     test_mask = subg_task_ids == current
 
+    if global_train_mask is not None:
+        train_mask = train_mask * global_train_mask[subg_mask]
+
     subg_num_nodes = subg_features.size(0)
 
     return NodeClassificationTask(
@@ -171,12 +192,26 @@ def _make_subgraph_task_geometric(task_ids, current, x, y, edge_index, edge_attr
             train_mask=train_mask, test_mask=test_mask,
             task_id=current)
 
-def make_subgraph_task(task_ids, current, x, y, dgl_graph=None, edge_index=None, edge_attr=None, cumulate=0):
+def make_subgraph_task(task_ids, current, x, y, dgl_graph=None, edge_index=None, edge_attr=None, cumulate=0,
+                       global_train_mask=None):
     backend = _check_graph_args(dgl_graph, edge_index, edge_attr)
     if backend == 'geometric':
-        task = _make_subgraph_task_geometric(task_ids, current, x, y, edge_index, edge_attr=edge_attr, cumulate=cumulate)
+        task = _make_subgraph_task_geometric(task_ids,
+                                             current,
+                                             x,
+                                             y,
+                                             edge_index,
+                                             edge_attr=edge_attr,
+                                             cumulate=cumulate,
+                                             global_train_mask=global_train_mask)
     elif backend == 'dgl':
-        task = _make_subgraph_task_dgl(task_ids, current, x, y, dgl_graph, cumulate=cumulate)
+        task = _make_subgraph_task_dgl(task_ids,
+                                       current,
+                                       x,
+                                       y,
+                                       dgl_graph,
+                                       cumulate=cumulate,
+                                       global_train_mask=global_train_mask)
     else:
         raise ValueError("Unknown Backend")
     return task
@@ -195,7 +230,8 @@ def make_lifelong_nodeclf_dataset(path, task_ids, x, y,
         edge_index=None, edge_attr=None,
         t_zero=None,
         cumulate=0,
-        inductive=False):
+        inductive=False,
+        subsample_train=None):
     task_ids = torch.as_tensor(task_ids, dtype=torch.long)
     t_numpy = task_ids.numpy()
     print("Creating lifelong node classification dataset")
@@ -209,13 +245,24 @@ def make_lifelong_nodeclf_dataset(path, task_ids, x, y,
     uniq_task_ids = np.unique(t_numpy[t_numpy >= t_zero])
     print(f"...for {len(uniq_task_ids)} tasks")
 
+
+    if subsample_train is not None:
+        print("Subsampling the train set *globally* to avoid inconsistencies across tasks")
+        assert isinstance(subsample_train, float) and subsample_train < 1.0 and subsample_train > 0.0
+        global_train_mask = np.random.random(num_nodes) < subsample_train  # numpy bool
+        global_train_mask = torch.as_tensor(global_train_mask, dtype=torch.bool)
+    else:
+        global_train_mask = None
+
     os.makedirs(path, exist_ok=True)
     for i, current in enumerate(tqdm(uniq_task_ids, desc="Preprocessing tasks")):
         task = make_subgraph_task(
-                task_ids, current, x, y,
-                dgl_graph=dgl_graph,
-                edge_index=edge_index, edge_attr=edge_attr,
-                cumulate=cumulate)
+            task_ids, current, x, y,
+            dgl_graph=dgl_graph,
+            edge_index=edge_index, edge_attr=edge_attr,
+            cumulate=cumulate,
+            global_train_mask=global_train_mask
+        )
         taskfile = task_path(path, i)
         task.save(taskfile)
 
