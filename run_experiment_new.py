@@ -603,6 +603,7 @@ if __name__ == '__main__':
     parser.add_argument("--only_first_task", default=False, action='store_true', help="Train only on first task (debug purposes)")
     parser.add_argument("--only_count_params", default=False, action='store_true', help="Print number of parameters and exit (debug purposes)")
     parser.add_argument("--evaluate_saint_on_cpu", default=False, action='store_true', help="Run the eval step of GraphSAINT on CPU")
+    parser.add_argument('--comment', type=str, default='', help="Some comment for logging purposes.")
     add_node2vec_args(parser)
 
     ARGS = parser.parse_args()
