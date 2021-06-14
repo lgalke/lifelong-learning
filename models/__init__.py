@@ -5,10 +5,10 @@ from .mlp import MLP
 from .mostfrequent import MostFrequentClass
 
 # Experimental
-from .gin import GIN
+# from .gin import GIN
 
 # Sampling
-from .gcn_cv_sc import GCNSampling
+# from .gcn_cv_sc import GCNSampling
 
 # Jumping knowledge
 from .jumping_knowledge import JKNet
