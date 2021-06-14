@@ -32,6 +32,12 @@ from lifelong_learning import lifelong_nodeclf_identifier
 from lifelong_learning import LifelongNodeClassificationDataset
 from lifelong_learning import collate_tasks
 
+try:
+    import wandb
+    USE_WANDB = True
+except ImportError:
+    USE_WANDB = False
+    print("Not using weightsandbiases integration. To use `pip install wandb`")
 
 def appendDFToCSV_void(df, csvFilePath, sep=","):
     """ Safe appending of a pandas df to csv file
@@ -84,7 +90,11 @@ def train(model, optimizer, g, feats, labels, mask=None, epochs=1, weights=None,
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        print("Epoch {:d} | Loss: {:.4f}".format(epoch + 1, loss.detach().item()))
+
+        myloss = loss.detach().item()
+        myepoch = epoch + 1
+        wandb.log({"epoch": myepoch, "train/loss": myloss})
+        print("Epoch {:d} | Loss: {:.4f}".format(myepoch, myloss))
 
 
 def evaluate(model, g, feats, labels, mask=None, compute_loss=True,
@@ -326,9 +336,12 @@ def main(args):
     if args.model == 'gcn_cv_sc':
         # unzip training and inference models
         model, infer_model = model
-
     print(model)
     optimizer = build_optimizer(args, model)
+
+    if USE_WANDB:
+        wandb.watch(model)
+
     num_params = count_params(model) if optimizer is not None else 0
     print("#params:", num_params)
     if args.only_count_params:
@@ -418,7 +431,10 @@ def main(args):
         # Add new classes to known classes
         known_classes |= new_classes
 
+        test_loss = None  # fall-back if evaluate model doesn't emit loss
+
         if args.model == 'mostfrequent':
+            assert args.subsample_train is None, "MostFrequent not impl. for subsample train"
             assert args.inductive
             if epochs > 0:
                 # Re-fit only if uptraining is in general allowed!
@@ -441,6 +457,7 @@ def main(args):
         elif args.model == "graphsaint":
             assert args.inductive
             # DON'T shift to GPU for graphsaint, it WILL fail
+            assert args.subsample_train is None, "GraphSAINT/Inductive not impl. for subsample train"
             train_saint(model,
                         optimizer,
                         train_task.graph(),
@@ -464,18 +481,20 @@ def main(args):
             else:
                 task = task.to(device)
                 # Shift model to CPU
-            acc, f1, _ = evaluate_saint(model,
+            acc, f1, test_loss = evaluate_saint(model,
                                     task.graph(),
                                     task.x,
                                     task.y,
                                     mask=task.test_mask,
-                                    compute_loss=False)
+                                    compute_loss=True)
             if args.evaluate_saint_on_cpu:
+                # Shift model back to gpu
                 model = model.to(device)
             gc.collect()
             torch.cuda.empty_cache()
         else:
             if inductive:
+                assert args.subsample_train is None, "Inductive not impl. for subsample train"
                 # Train on t-1
                 train_task = train_task.to(device)
                 train(model,
@@ -506,15 +525,26 @@ def main(args):
                       weights=weights,
                       backend=backend)
 
-            acc, f1, _ = evaluate(model,
-                              task.graph(),
-                              task.x,
-                              task.y,
-                              mask=task.test_mask,
-                              compute_loss=False,
-                              backend=backend)
+            acc, f1, test_loss = evaluate(model,
+                                    task.graph(),
+                                    task.x,
+                                    task.y,
+                                    mask=task.test_mask,
+                                    compute_loss=True,
+                                    backend=backend)
         print(f"[{current_year} ~ Epoch {epochs}] Test Accuracy: {acc:.4f}")
+
         results_df = attach_score(results_df, current_year, epochs, acc, f1)
+
+        if USE_WANDB:
+            wandb.log({ "task_id": current_year,
+                        "test/accuracy": acc,
+                        "test/f1_macro": f1,
+                        "test/loss": test_loss
+                        })
+
+
+
         # input() # debug purposes
         # DROP ALL STUFF COMPUTED FOR CURRENT WINDOW (no memory leaks)
         del task
@@ -528,6 +558,15 @@ def main(args):
         #     except:
         #         pass
         # input()
+
+    if USE_WANDB:
+        # This makes WandB compute summary metrics for accuracy and f1 macro
+        # including the average!
+        # TODO: be careful when more than one accuracy per task is stored in results
+        # (currently not a problem, as we only store one set of values per task)
+        wandb.run.summary["test/accuracy"] = results_df["accuracy"].values
+        wandb.run.summary["test/f1_macro"] = results_df["f1_macro"].values
+        wandb.run.summary.update()
 
     if args.save is not None:
         print("Saving final results to", args.save)
@@ -548,7 +587,7 @@ if __name__ == '__main__':
                                  'egcn', 'gat', 'gcn', 'jknet-sageconv', 'jknet-graphconv', 'graphsaint',
                                  'node2vec', 'sgnet'])
     parser.add_argument('--sampling', type=str, choices=['rw', 'node', 'edge'],
-                        default=None)
+                        default=None, help="Sampling strategy. Only for GraphSAINT")
     parser.add_argument('--variant', type=str, default='',
                         help="Model variant, if model is GraphSAINT, specifies the Geometric base model")
     parser.add_argument('--dataset', type=str, help="Specify the dataset", choices=list(DATASET_PATHS.keys()),
@@ -607,6 +646,10 @@ if __name__ == '__main__':
     add_node2vec_args(parser)
 
     ARGS = parser.parse_args()
+
+    if USE_WANDB:
+        wandb.init(project="lifelong-learning")
+        wandb.config.update(ARGS)
 
 
     if ARGS.initial_epochs is None:
