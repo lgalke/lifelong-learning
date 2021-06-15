@@ -85,13 +85,14 @@ if args.vertlines:
 
 
 
-# theplot.set(xticks=[range(2005,2016,5), range(2005,2016,5), range(2000,2016,5)])
+if args.x == 'year':
+    # theplot.set(xticks=[range(2005,2016,5), range(2005,2016,5), range(2000,2016,5)])
+    for i, ax in enumerate(theplot.axes.flat):
+        if i < 2:
+            ax.set(xticks=range(2005, 2016, 5))
+        else:
+            ax.set(xticks=range(2000, 2016, 5))
 
-for i, ax in enumerate(theplot.axes.flat):
-    if i < 2:
-        ax.set(xticks=range(2005, 2016, 5))
-    else:
-        ax.set(xticks=range(2000, 2016, 5))
 
 if args.save:
     plt.savefig(args.save)
