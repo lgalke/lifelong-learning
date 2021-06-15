@@ -678,7 +678,7 @@ if __name__ == '__main__':
     try:
         dataset_path = DATASET_PATHS[ARGS.dataset]
 
-        preprocessed_dataset_identifier = lifelong_nodeclf_identifier(args.dataset, args.t_start-1, args.history, args.backend, label_rate=args.label_rate)
+        preprocessed_dataset_identifier = lifelong_nodeclf_identifier(ARGS.dataset, ARGS.t_start-1, ARGS.history, ARGS.backend, label_rate=ARGS.label_rate)
         ARGS.data_path = os.path.join(dataset_path, preprocessed_dataset_identifier)
     except:
         print(f"Dataset not in dict, assuming preprocessed dataset at: {ARGS.dataset}")
@@ -701,7 +701,8 @@ if __name__ == '__main__':
     # Backward compatibility:
     # current implementation actually uses 'pretrain_until'
     # as last timestep / year *BEFORE* t_start
-    ARGS.pretrain_until = ARGS.t_start - 1
+    # ARGS.pretrain_until = ARGS.t_start - 1
+    # Not needed anymore
 
 
     # Sanity checks #

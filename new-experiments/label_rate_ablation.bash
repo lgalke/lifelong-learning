@@ -17,8 +17,8 @@ for SEED in 0; do
     # HISTORY 1
     # python3 run_experiment.py --seed "$SEED" --model mlp --n_hidden 64 --start cold --lr "0.001" --history 1 $ARGS $PRETRAIN_ARGS --dataset "$DATA" --save "$OUTFILE"
     # python3 run_experiment.py --seed "$SEED" --model mlp --n_hidden 64 --start warm --lr "0.001" --history 1 $ARGS $PRETRAIN_ARGS --dataset "$DATA" --save "$OUTFILE"
-    python3 run_experiment_new.py --seed "$SEED" --model gs-mean --n_hidden 32 --start cold --lr "0.001" --history 1 $ARGS $PRETRAIN_ARGS --dataset "$DATA" --save "$OUTFILE" --comment $LABELRATE --t_start 2004
-    python3 run_experiment_new.py --seed "$SEED" --model gs-mean --n_hidden 32 --start warm --lr "0.001" --history 1 $ARGS $PRETRAIN_ARGS --dataset "$DATA" --save "$OUTFILE" --comment $LABELRATE --t_start 2004
+    python3 run_experiment_new.py --seed "$SEED" --model gs-mean --n_hidden 32 --start cold --lr "0.001" --history 1 $ARGS $PRETRAIN_ARGS --dataset "$DATA" --save "$OUTFILE" --label_rate $LABELRATE --t_start 2004
+    python3 run_experiment_new.py --seed "$SEED" --model gs-mean --n_hidden 32 --start warm --lr "0.001" --history 1 $ARGS $PRETRAIN_ARGS --dataset "$DATA" --save "$OUTFILE" --label_rate $LABELRATE --t_start 2004
     # python3 run_experiment.py --seed "$SEED" --model gat --n_hidden 64 --start cold --lr "0.005" --history 1 $ARGS $PRETRAIN_ARGS --dataset "$DATA" --save "$OUTFILE"
     # python3 run_experiment.py --seed "$SEED" --model gat --n_hidden 64 --start warm --lr "0.001" --history 1 $ARGS $PRETRAIN_ARGS --dataset "$DATA" --save "$OUTFILE"
     # # HISTORY 3
@@ -26,8 +26,8 @@ for SEED in 0; do
     DATA="/media/nvme1n1/lgalke/datasets/Incremental-GNNs/label_rate_ablation/dblp-hard-tzero2003-history$HISTORY-dgl-$LABELRATE"
     # python3 run_experiment.py --seed "$SEED" --model mlp --n_hidden 64 --start cold --lr "0.001" --history 3 $ARGS $PRETRAIN_ARGS --dataset "$DATA" --save "$OUTFILE"
     # python3 run_experiment.py --seed "$SEED" --model mlp --n_hidden 64 --start warm --lr "0.001" --history 3 $ARGS $PRETRAIN_ARGS --dataset "$DATA" --save "$OUTFILE"
-    python3 run_experiment_new.py --seed "$SEED" --model gs-mean --n_hidden 32 --start cold --lr "0.005" --history 3 $ARGS $PRETRAIN_ARGS --dataset "$DATA" --save "$OUTFILE" --comment $LABELRATE --t_start 2004
-    python3 run_experiment_new.py --seed "$SEED" --model gs-mean --n_hidden 32 --start warm --lr "0.005" --history 3 $ARGS $PRETRAIN_ARGS --dataset "$DATA" --save "$OUTFILE" --comment $LABELRATE --t_start 2004
+    python3 run_experiment_new.py --seed "$SEED" --model gs-mean --n_hidden 32 --start cold --lr "0.005" --history 3 $ARGS $PRETRAIN_ARGS --dataset "$DATA" --save "$OUTFILE" --label_rate $LABELRATE --t_start 2004
+    python3 run_experiment_new.py --seed "$SEED" --model gs-mean --n_hidden 32 --start warm --lr "0.005" --history 3 $ARGS $PRETRAIN_ARGS --dataset "$DATA" --save "$OUTFILE" --label_rate $LABELRATE --t_start 2004
     # python3 run_experiment.py --seed "$SEED" --model gat --n_hidden 64 --start cold --lr "0.005" --history 3 $ARGS $PRETRAIN_ARGS --dataset "$DATA" --save "$OUTFILE"
     # python3 run_experiment.py --seed "$SEED" --model gat --n_hidden 64 --start warm --lr "0.005" --history 3 $ARGS $PRETRAIN_ARGS --dataset "$DATA" --save "$OUTFILE"
     # HISTORY 6
@@ -35,8 +35,8 @@ for SEED in 0; do
     DATA="/media/nvme1n1/lgalke/datasets/Incremental-GNNs/label_rate_ablation/dblp-hard-tzero2003-history$HISTORY-dgl-$LABELRATE"
     # python3 run_experiment.py --seed "$SEED" --model mlp --n_hidden 64 --start cold --lr "0.005" --history 6 $ARGS $PRETRAIN_ARGS --dataset "$DATA" --save "$OUTFILE"
     # python3 run_experiment.py --seed "$SEED" --model mlp --n_hidden 64 --start warm --lr "0.001" --history 6 $ARGS $PRETRAIN_ARGS --dataset "$DATA" --save "$OUTFILE"
-    python3 run_experiment_new.py --seed "$SEED" --model gs-mean --n_hidden 32 --start cold --lr "0.01" --history 6 $ARGS $PRETRAIN_ARGS --dataset "$DATA" --save "$OUTFILE" --comment $LABELRATE --t_start 2004
-    python3 run_experiment_new.py --seed "$SEED" --model gs-mean --n_hidden 32 --start warm --lr "0.005" --history 6 $ARGS $PRETRAIN_ARGS --dataset "$DATA" --save "$OUTFILE" --comment $LABELRATE --t_start 2004
+    python3 run_experiment_new.py --seed "$SEED" --model gs-mean --n_hidden 32 --start cold --lr "0.01" --history 6 $ARGS $PRETRAIN_ARGS --dataset "$DATA" --save "$OUTFILE" --label_rate $LABELRATE --t_start 2004
+    python3 run_experiment_new.py --seed "$SEED" --model gs-mean --n_hidden 32 --start warm --lr "0.005" --history 6 $ARGS $PRETRAIN_ARGS --dataset "$DATA" --save "$OUTFILE" --label_rate $LABELRATE --t_start 2004
     # python3 run_experiment.py --seed "$SEED" --model gat --n_hidden 64 --start cold --lr "0.05" --history 6 $ARGS $PRETRAIN_ARGS --dataset "$DATA" --save "$OUTFILE"
     # python3 run_experiment.py --seed "$SEED" --model gat --n_hidden 64 --start warm --lr "0.01" --history 6 $ARGS $PRETRAIN_ARGS --dataset "$DATA" --save "$OUTFILE"
     # HISTORY 25 
@@ -46,8 +46,8 @@ for SEED in 0; do
     # python3 run_experiment.py --seed "$SEED" --model mlp --n_hidden 64 --start warm --lr "0.001" --history 25 $ARGS $PRETRAIN_ARGS --dataset "$DATA" --save "$OUTFILE"
 
     # Next two lines may fail on 12GB GPUs, maybe need to run on CPU instead
-    python3 run_experiment_new.py --seed "$SEED" --model gs-mean --n_hidden 32 --start cold --lr "0.01" --history 25 $ARGS $PRETRAIN_ARGS --dataset "$DATA" --save "$OUTFILE" --comment $LABELRATE --t_start 2004
-    python3 run_experiment_new.py --seed "$SEED" --model gs-mean --n_hidden 32 --start warm --lr "0.005" --history 25 $ARGS $PRETRAIN_ARGS --dataset "$DATA" --save "$OUTFILE" --comment $LABELRATE --t_start 2004
+    python3 run_experiment_new.py --seed "$SEED" --model gs-mean --n_hidden 32 --start cold --lr "0.01" --history 25 $ARGS $PRETRAIN_ARGS --dataset "$DATA" --save "$OUTFILE" --label_rate $LABELRATE --t_start 2004
+    python3 run_experiment_new.py --seed "$SEED" --model gs-mean --n_hidden 32 --start warm --lr "0.005" --history 25 $ARGS $PRETRAIN_ARGS --dataset "$DATA" --save "$OUTFILE" --label_rate $LABELRATE --t_start 2004
 
     # python3 run_experiment.py --seed "$SEED" --model gat --n_hidden 64 --start cold --lr "0.05" --history 25 $ARGS $PRETRAIN_ARGS --dataset "$DATA" --save "$OUTFILE"
     # python3 run_experiment.py --seed "$SEED" --model gat --n_hidden 64 --start warm --lr "0.05" --history 25 $ARGS $PRETRAIN_ARGS --dataset "$DATA" --save "$OUTFILE"
