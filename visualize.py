@@ -14,6 +14,8 @@ import os.path as osp
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('data', nargs='+')
+parser.add_argument('-x', default='year')
+parser.add_argument('-y', default='accuracy')
 parser.add_argument('--style', default=None)
 parser.add_argument('--hue', default=None)
 parser.add_argument('--row', default=None)
@@ -53,8 +55,8 @@ data['incr. training'] = data.annual_epochs.map(bool)
 data['window size %RF'] = data.history.map({1: '25%', 3: '50%', 4: '50%', 6: '75%', 8: '75%', 21: '100%', 25: '100%'})
 # data.dataset = data.dataset.map({'7dc': 'pharmabio', 'dblp-graph': 'dblp-easy', 'dblp-graph-hard': 'dblp-hard'})
 
-theplot = sns.relplot(x='year',
-                      y='accuracy',
+theplot = sns.relplot(x=args.x,
+                      y=args.y,
                       kind='line',
                       data=data,
                       row=args.row,

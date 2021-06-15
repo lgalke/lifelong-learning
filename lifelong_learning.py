@@ -6,10 +6,14 @@ import torch_geometric as tg
 import pickle
 from tqdm import tqdm
 
-def lifelong_nodeclf_identifier(dataset, t_zero, history, backend):
+def lifelong_nodeclf_identifier(dataset, t_zero, history, backend, label_rate=None):
     # make sure dataset is not a path
     dataset_name = os.path.basename(os.path.abspath(dataset))
-    return f"{dataset_name}-tzero{t_zero}-history{history}-{backend}"
+    s = f"{dataset_name}-tzero{t_zero}-history{history}-{backend}"
+
+    if label_rate is not None:
+        s += "-" + str(label_rate)
+    return s
 
 class Task:
     def __init__(self, x, y, task_id=None):
@@ -274,7 +278,8 @@ def make_lifelong_nodeclf_dataset(path, task_ids, x, y,
             "num_tasks": len(uniq_task_ids),
             "t_min": int(t_numpy.min()),
             "t_max": int(t_numpy.max()),
-            "backend": str(backend)
+            "backend": str(backend),
+            "label_rate": float(subsample_train)
     }
 
     infopath = os.path.join(path, "info.json")
@@ -299,6 +304,7 @@ class LifelongNodeClassificationDataset(torch.utils.data.Dataset):
         self.t_min = int(info['t_min'])
         self.t_max = int(info['t_max'])
         self.backend = str(info['backend'])
+        self.label_rate = float(info['label_rate'])
         self.inductive = inductive
 
     def __repr__(self):

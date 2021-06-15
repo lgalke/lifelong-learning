@@ -20,7 +20,7 @@ class GCN(nn.Module):
                  n_layers,
                  activation,
                  dropout,
-                 improved=improved):
+                 improved=True):
         super(GCN, self).__init__()
         self.layers = nn.ModuleList()
         # input layer

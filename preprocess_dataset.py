@@ -14,14 +14,14 @@ def main():
     parser.add_argument("--history", default=0, type=int, help="History size")
     parser.add_argument("--backend", default="dgl", type=str, choices=["dgl", "geometric"])
     parser.add_argument("--basedir", help="Basedir for preprocessed dataset, else create subdirectory in input")
-    parser.add_argument("--subsample_train", help="Subsample the train nodes globally.", default=None, type=float)
+    parser.add_argument("--label_rate", help="Subsample the train nodes globally.", default=None, type=float)
     args = parser.parse_args()
-    if args.subsample_train is not None:
-        assert args.subsample_train > 0.0 and args.subsample_train < 1.0
+    if args.label_rate is not None:
+        assert args.label_rate > 0.0 and args.label_rate < 1.0
     graph_or_edge_index, features, labels, years = load_data(args.dataset, backend=args.backend)
     basedir = args.basedir if args.basedir else args.dataset
 
-    outdir = os.path.join(basedir, lifelong_nodeclf_identifier(args.dataset, args.t_zero, args.history, args.backend))
+    outdir = os.path.join(basedir, lifelong_nodeclf_identifier(args.dataset, args.t_zero, args.history, args.backend, label_rate=args.label_rate))
 
     # Cast to torch tensors
     features = torch.as_tensor(features, dtype=torch.float)
@@ -36,7 +36,7 @@ def main():
                                                 edge_index=graph_or_edge_index,
                                                 t_zero=args.t_zero,
                                                 cumulate=args.history,
-                                                subsample_train=args.subsample_train)
+                                                subsample_train=args.label_rate)
     elif args.backend == 'dgl':
         dataset = make_lifelong_nodeclf_dataset(outdir,
                                                 years,
@@ -45,7 +45,7 @@ def main():
                                                 dgl_graph=graph_or_edge_index,
                                                 t_zero=args.t_zero,
                                                 cumulate=args.history,
-                                                subsample_train=args.subsample_train)
+                                                subsample_train=args.label_rate)
     else:
         raise ValueError("Unknown backend")
 

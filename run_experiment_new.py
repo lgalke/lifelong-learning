@@ -255,6 +255,7 @@ def restart(model, mode, known_classes: set, new_classes: set):
     return model
 
 RESULT_COLS = ['dataset',
+               'label_rate',
                'inductive',
                'seed',
                'backend',
@@ -310,11 +311,9 @@ def main(args):
         inductive = False
 
     # Assume preprocessed dataset is in subdir of dataset
-    effective_dataset_path = os.path.join(args.data_path,
-            lifelong_nodeclf_identifier(args.dataset, args.t_start-1, args.history, args.backend))
 
-    print("Expecting preprocessed data at", effective_dataset_path)
-    dataset = LifelongNodeClassificationDataset(effective_dataset_path, inductive=args.inductive)
+    print("Expecting preprocessed data at", args.data_path)
+    dataset = LifelongNodeClassificationDataset(args.data_path, inductive=args.inductive)
     print(dataset)
     print(f"[t_min, tmax] = [{dataset.t_min}, {dataset.t_max}]")
     print(f"t_zero in dataset = {dataset.t_zero} (should be the one before t_start)")
@@ -354,6 +353,7 @@ def main(args):
         return df.append(
             pd.DataFrame(
                 [[args.dataset,
+                  args.label_rate,
                   args.inductive,
                   args.seed,
                   backend,
@@ -564,9 +564,11 @@ def main(args):
         # including the average!
         # TODO: be careful when more than one accuracy per task is stored in results
         # (currently not a problem, as we only store one set of values per task)
-        wandb.run.summary["test/accuracy"] = results_df["accuracy"].values
-        wandb.run.summary["test/f1_macro"] = results_df["f1_macro"].values
-        wandb.run.summary.update()
+        wandb.run.summary["test/avg_accuracy"] = results_df["accuracy"].values.mean()
+        wandb.run.summary["test/sd_accuracy"] = results_df["accuracy"].values.std(ddof=1)
+        wandb.run.summary["test/avg_f1_macro"] = results_df["f1_macro"].values.mean()
+        wandb.run.summary["test/sd_f1_macro"] = results_df["f1_macro"].values.std(ddof=1)
+        # wandb.run.summary.update()
 
     if args.save is not None:
         print("Saving final results to", args.save)
@@ -590,7 +592,7 @@ if __name__ == '__main__':
                         default=None, help="Sampling strategy. Only for GraphSAINT")
     parser.add_argument('--variant', type=str, default='',
                         help="Model variant, if model is GraphSAINT, specifies the Geometric base model")
-    parser.add_argument('--dataset', type=str, help="Specify the dataset", choices=list(DATASET_PATHS.keys()),
+    parser.add_argument('--dataset', type=str, help="Specify the dataset", # choices=list(DATASET_PATHS.keys()),
                         default='pharmabio')
     parser.add_argument('--t_start', type=int,
                         help="The first evaluation time step. Default is 2004 for DBLP-{easy,hard} and 1999 for PharmaBio")
@@ -643,6 +645,7 @@ if __name__ == '__main__':
     parser.add_argument("--only_count_params", default=False, action='store_true', help="Print number of parameters and exit (debug purposes)")
     parser.add_argument("--evaluate_saint_on_cpu", default=False, action='store_true', help="Run the eval step of GraphSAINT on CPU")
     parser.add_argument('--comment', type=str, default='', help="Some comment for logging purposes.")
+    parser.add_argument('--label_rate', type=float, default=None, help="Label rate (needs to be preprocessed)")
     add_node2vec_args(parser)
 
     ARGS = parser.parse_args()
@@ -671,10 +674,14 @@ if __name__ == '__main__':
         print("**************************************************")
 
     # Handle dataset argument to get path to data
+
     try:
-        ARGS.data_path = DATASET_PATHS[ARGS.dataset]
-    except KeyError:
-        print("Dataset key not found, trying to interprete as raw path")
+        dataset_path = DATASET_PATHS[ARGS.dataset]
+
+        preprocessed_dataset_identifier = lifelong_nodeclf_identifier(args.dataset, args.t_start-1, args.history, args.backend, label_rate=args.label_rate)
+        ARGS.data_path = os.path.join(dataset_path, preprocessed_dataset_identifier)
+    except:
+        print(f"Dataset not in dict, assuming preprocessed dataset at: {ARGS.dataset}")
         ARGS.data_path = ARGS.dataset
     print("Using dataset with path:", ARGS.data_path)
 
