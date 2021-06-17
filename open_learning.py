@@ -1,13 +1,20 @@
+""" Module for Open Learning """
 from abc import ABC, abstractmethod
 import torch
+from torch.nn import Module
 
-class OpenLearning(ABC):
+
+class OpenLearning(Module, ABC):
     """ Abstract base class for open world learning """
 
     @abstractmethod
     def loss(self, logits, labels):
         """ Return loss score to train model """
         raise NotImplementedError("Abstract method called")
+
+    def fit(self, logits, labels):
+        """ Hook to learn additional parameters on whole training set """
+        return self
 
     @abstractmethod
     def predict(self, logits):
@@ -19,7 +26,7 @@ class OpenLearning(ABC):
         """ Return example-wise mask to emit 1 if reject and 0 otherwise """
         raise NotImplementedError("Abstract method called")
 
-    def __call__(self, logits, labels=None):
+    def forward(self, logits, labels=None):
 
         reject_mask = self.reject(logits)
         predictions = self.predict(logits)
@@ -28,43 +35,63 @@ class OpenLearning(ABC):
         return reject_mask, predictions, loss
 
 
-class DOC(OpenLearning):
+class DeepOpenClassification(OpenLearning):
     """
     Deep Open ClassificatioN: Sigmoidal activation + Threshold based rejection
-    Inputs should *not* be activated in any way (neither softmax nor sigmoid)
+    Inputs should *not* be activated in any way.
+    This module will apply sigmoid activations.
     """
-    def __init__(self, t:float=0.5, alpha=3., **kwargs):
+    def __init__(self, threshold: float = 0.5,
+                 reduce_risk: bool = False, alpha: float = 3.0, **kwargs):
+        """
+        Arguments
+        ---------
+        threshold: Threshold for class rejection
+        alpha: Factor of standard deviation to reduce open space risk
+        **kwargs: will be passed to BCEWithLogitsLoss
+        """
+        super().__init__()
         self.criterion = torch.nn.BCEWithLogitsLoss(**kwargs)
-        self.threshold = t
-        self.alpha = alpha
+        self.reduce_risk = bool(reduce_risk)
+        self.alpha = float(alpha)
+        self.threshold = float(threshold)
+
+        # Minimum threshold if reduce_risk is True,
+        # allows to call fit() multiple times
+        self.min_threshold = threshold
 
     def loss(self, logits, labels):
         return self.criterion(logits, labels)
 
     def fit(self, logits, labels):
         """ Gaussian fitting of the thresholds per class.
-        To be called on the full training set after actual training, but before evaluation
+        To be called on the full training set after actual training,
+        but before evaluation!
         """
+        if not self.reduce_risk:
+            print("[DOC/warning] fit() called but reduce_risk is False. Pass.")
+            return self
+
         # TODO: extend to online variant by computing *rolling* std. dev.?
 
-        num_classes = logits.size(1)
         # posterior "probabilities" p(y=l_i | x_j, y_j = li)
-        points = logits.detach().sigmoid()  # [num_examples, num_classes]
+        y = logits.detach().sigmoid()  # [num_examples, num_classes]
 
         # for each existing point,
         # create a mirror point (not a probability),
         # mirrored on the mean of 1
-        mirror_points = 1 + ( 1 - y )  # [num_examples, num_classes]
+        y_mirror = 1 + (1 - y)  # [num_examples, num_classes]
 
         # estimate the standard deviation per class
         # using both existing and the created points
-        all_points = torch.cat(points, mirror_points) # [2*num_examples, num_classes]
+        all_points = torch.cat(y, y_mirror)  # [2*num_examples, num_classes]
         std_per_class = all_points.std(dim=0, unbiased=True)  # [num_classes]
         # TODO: unbiased SD? orig work did not specify...
 
         # Set the probability threshold t_i = max(0.5, 1 - alpha * SD_i)
-        thresholds_per_class = (1 - self.alpha * std_per_class).clamp(0.5)  # [num_classes]
-        # TODO: Orig paper uses base threshold 0.5, we could also use a specified minimum threshold
+        thresholds_per_class = (1 - self.alpha * std_per_class).clamp(0.5)
+        # TODO: Orig paper uses base threshold 0.5,
+        # we could also use a specified minimum threshold
 
         self.threshold = thresholds_per_class  # [num_classes]
 
@@ -80,3 +107,40 @@ class DOC(OpenLearning):
         # Basic argmax
         __max_vals, max_indices = torch.max(y_proba, dim=1)
         return max_indices
+
+
+class OpenMax(OpenLearning):
+    pass
+
+
+# Module-level functions
+
+def add_args(parser):
+    parser.add_argument('--open_learning', default=None,
+                        help="Method for self detection of unseen classes",
+                        choices=["doc"])
+    parser.add_argument('--doc_threshold', default=0.5,
+                        help="Threshold for DOC")
+    parser.add_argument('--doc_reduce_risk',
+                        default=False, action='store_true',
+                        help="Reduce Open Space Risk by Gaussian-fitting")
+    parser.add_argument('--doc_alpha', default=3.0,
+                        help="Alpha for DOC")
+
+
+def build(args):
+    if args.open_learning == "doc":
+        return DeepOpenClassification(threshold=args.doc_threshold,
+                                      reduce_risk=args.doc_reduce_risk,
+                                      alpha=args.doc_alpha)
+    elif args.open_learning == "openmax":
+        raise NotImplementedError("OpenMax not yet implemented")
+    else:
+        raise NotImplementedError(f"Unknown key: {args.open_learning}")
+
+
+def evaluate_open_learning(predictions, reject_mask,
+                           true_labels, unknown_classes):
+    # TODO: f1 macro including pseudo-class for unknown
+    # TODO: Matthews for hit or miss?
+    raise NotImplementedError("Open Learning eval not impl.")

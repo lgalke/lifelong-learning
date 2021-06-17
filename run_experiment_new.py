@@ -24,13 +24,17 @@ from models.sgnet import SGNet
 
 from models.graphsaint import train_saint, evaluate_saint
 from models import geometric as geo
-from models.node2vec import add_node2vec_args, train_node2vec, evaluate_node2vec
+from models.node2vec import (add_node2vec_args,
+                             train_node2vec,
+                             evaluate_node2vec)
 
-from datasets import load_data
+# from datasets import load_data  # unused
 
 from lifelong_learning import lifelong_nodeclf_identifier
 from lifelong_learning import LifelongNodeClassificationDataset
 from lifelong_learning import collate_tasks
+
+import open_learning
 
 try:
     import wandb
@@ -38,6 +42,7 @@ try:
 except ImportError:
     USE_WANDB = False
     print("Not using weightsandbiases integration. To use `pip install wandb`")
+
 
 def appendDFToCSV_void(df, csvFilePath, sep=","):
     """ Safe appending of a pandas df to csv file
@@ -65,8 +70,8 @@ def compute_weights(ts, exponential_decay, initial_quantity=1.0, normalize=True)
     return values
 
 
-def train(model, optimizer, g, feats, labels, mask=None, epochs=1, weights=None,
-          backend='dgl'):
+def train(model, optimizer, g, feats, labels, mask=None, epochs=1,
+          weights=None, backend='dgl', open_learning_model=None):
     model.train()
     reduction = 'none' if weights is not None else 'mean'
 
@@ -79,8 +84,14 @@ def train(model, optimizer, g, feats, labels, mask=None, epochs=1, weights=None,
         logits = model(*inputs)
 
         if mask is not None:
-            loss = F.cross_entropy(logits[mask], labels[mask], reduction=reduction)
+            logits = logits[mask]
+            labels = labels[mask]
+
+        if open_learning_model is not None:
+            # The open learning model defines the loss
+            loss = open_learning_model.loss(logits, labels)
         else:
+            # Standard cross entropy training
             loss = F.cross_entropy(logits, labels, reduction=reduction)
 
         if weights is not None:
@@ -96,9 +107,13 @@ def train(model, optimizer, g, feats, labels, mask=None, epochs=1, weights=None,
         wandb.log({"epoch": myepoch, "train/loss": myloss})
         print("Epoch {:d} | Loss: {:.4f}".format(myepoch, myloss))
 
+    if open_learning_model is not None:
+        print("Fitting Open Learning Model")
+        open_learning_model.fit(logits, labels)
+
 
 def evaluate(model, g, feats, labels, mask=None, compute_loss=True,
-             backend='dgl'):
+             backend='dgl', open_learning_model=None, new_classes: set = None):
     model.eval()
 
     if hasattr(model, '__reset_cache__'):
@@ -123,6 +138,10 @@ def evaluate(model, g, feats, labels, mask=None, compute_loss=True,
         __max_vals, max_indices = torch.max(logits.detach(), 1)
         acc = (max_indices == labels).sum().float() / labels.size(0)
         f1 = f1_score(labels.cpu(), max_indices.cpu(), average="macro")
+
+        if open_learning_model is not None:
+            # TODO conduct open learning evaluation
+            raise NotImplementedError("Open space evaluation not implemented")
 
     return acc.item(), f1, loss
 
@@ -153,7 +172,7 @@ def build_model(args, in_feats, n_hidden, n_classes, device, n_layers=1, backend
                     mode="cat", conv_kwargs={"normalize": False}, backend="geometric").to(device)
         elif model_spec == 'jknet-graphconv':
             model = JKNet(tg.nn.GraphConv, in_feats, n_hidden, n_classes, n_layers, F.relu, args.dropout,
-                    mode="cat", conv_kwargs={"aggr": "mean"}, backend="geometric").to(device)
+                          mode="cat", conv_kwargs={"aggr": "mean"}, backend="geometric").to(device)
         elif model_spec == "sgnet":
             model = geo.SGNet(in_channels=in_feats, out_channels=n_classes, K=n_layers, cached=True).to(device)
         else:
@@ -292,28 +311,33 @@ def main(args):
 
     print("Using backend:", backend)
 
-    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-
-
-
-    if args.model in ['graphsaint']:
-        print("///////////////////")
-        print("//// inductive ////")
-        print("///////////////////")
-        # Train completely on Task t-1
-        globals_device = torch.device("cpu")
-        assert args.inductive
+    # Device setup
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
     else:
-        print("//////////////////////")
-        print("//// transductive ////")
-        print("//////////////////////")
-        globals_device = device
-        inductive = False
+        device = torch.device("cpu")
+    if args.model == 'mostfrequent':
+        device = torch.device("cpu")
+
+    # LEGACY CODE, not used anymore
+    # if args.model in ['graphsaint']:
+    #     print("///////////////////")
+    #     print("//// inductive ////")
+    #     print("///////////////////")
+    #     # Train completely on Task t-1
+    #     globals_device = torch.device("cpu")
+    #     assert args.inductive
+    # else:
+    #     print("//////////////////////")
+    #     print("//// transductive ////")
+    #     print("//////////////////////")
+    #     globals_device = device
+    #     inductive = False
 
     # Assume preprocessed dataset is in subdir of dataset
-
     print("Expecting preprocessed data at", args.data_path)
-    dataset = LifelongNodeClassificationDataset(args.data_path, inductive=args.inductive)
+    dataset = LifelongNodeClassificationDataset(args.data_path,
+                                                inductive=args.inductive)
     print(dataset)
     print(f"[t_min, tmax] = [{dataset.t_min}, {dataset.t_max}]")
     print(f"t_zero in dataset = {dataset.t_zero} (should be the one before t_start)")
@@ -321,13 +345,8 @@ def main(args):
     assert dataset.history_size == args.history, "History sizes do not match"
     assert dataset.backend == args.backend, "Backends do not match"
 
-    if args.model == 'mostfrequent':
-        # Makes no sense to put things on GPU when using simple most frequent classifier
-        device = torch.device("cpu")
-
     n_classes = dataset.num_classes
     in_feats = dataset.num_features
-    n_layers = args.n_layers
     n_hidden = args.n_hidden
 
     model = build_model(args, in_feats, n_hidden, n_classes, device,
@@ -384,8 +403,12 @@ def main(args):
             ignore_index=True)
 
     known_classes = set()
-    taskloader = torch.utils.data.DataLoader(dataset, shuffle=False, batch_size=1,
-            collate_fn=collate_tasks)
+    taskloader = torch.utils.data.DataLoader(dataset, shuffle=False,
+                                             batch_size=1,
+                                             collate_fn=collate_tasks)
+
+    if args.open_learning:
+        olg_model = open_learning.build(args)
 
     for t, batch in enumerate(taskloader):
         if args.only_first_task and t > 0:
@@ -447,7 +470,8 @@ def main(args):
                               mask=task.test_mask,
                               compute_loss=False)
         elif args.model == 'node2vec':
-            assert not args.inductive
+            assert args.subsample_train is None, "MostFrequent not impl. for subsample train"
+            assert not args.inductive, "Node2vec can only be applied transductively"
             train_node2vec(model, optimizer, epochs=epochs,
                            batch_size=args.n2v_batch_size,
                            shuffle=True,
@@ -455,9 +479,10 @@ def main(args):
             acc = evaluate_node2vec(model, task.y, task.train_mask, task.test_mask)
 
         elif args.model == "graphsaint":
-            assert args.inductive
             # DON'T shift to GPU for graphsaint, it WILL fail
-            assert args.subsample_train is None, "GraphSAINT/Inductive not impl. for subsample train"
+            assert args.inductive, "GraphSAINT is only implemented for the inductive case"
+            assert args.subsample_train is None, "Subsample Train (label rate) not impl. for GraphSAINT"
+            assert args.open_learning is None, "Open Learning not impl. for GraphSAINT"
             train_saint(model,
                         optimizer,
                         train_task.graph(),
@@ -493,7 +518,7 @@ def main(args):
             gc.collect()
             torch.cuda.empty_cache()
         else:
-            if inductive:
+            if args.inductive:
                 assert args.subsample_train is None, "Inductive not impl. for subsample train"
                 # Train on t-1
                 train_task = train_task.to(device)
@@ -505,7 +530,8 @@ def main(args):
                       mask=None,
                       epochs=epochs,
                       weights=weights,
-                      backend=backend)
+                      backend=backend,
+                      open_learning_model=olg_model)
                 del train_task
                 gc.collect()
                 torch.cuda.empty_cache()
@@ -513,7 +539,7 @@ def main(args):
             # Put current task on device
             task = task.to(device)
 
-            if not inductive:
+            if not args.inductive:
                 # Train on train_mask of current task
                 train(model,
                       optimizer,
@@ -523,15 +549,17 @@ def main(args):
                       mask=task.train_mask,
                       epochs=epochs,
                       weights=weights,
-                      backend=backend)
+                      backend=backend,
+                      open_learning_model=olg_model)
 
             acc, f1, test_loss = evaluate(model,
-                                    task.graph(),
-                                    task.x,
-                                    task.y,
-                                    mask=task.test_mask,
-                                    compute_loss=True,
-                                    backend=backend)
+                                          task.graph(),
+                                          task.x,
+                                          task.y,
+                                          mask=task.test_mask,
+                                          compute_loss=True,
+                                          backend=backend)
+
         print(f"[{current_year} ~ Epoch {epochs}] Test Accuracy: {acc:.4f}")
 
         results_df = attach_score(results_df, current_year, epochs, acc, f1)
@@ -629,7 +657,7 @@ if __name__ == '__main__':
     parser.add_argument('--test_batch_size', type=int, default=10000,
                         help="Test batch size (testing is done on cpu)")
     # parser.add_argument('--limited_pretraining', default=False, action="store_true",
-    #                     help="Perform pretraining on the first history window.") 
+    #                     help="Perform pretraining on the first history window.")
     parser.add_argument('--decay', default=None, type=float, help="Paramater for exponential decay loss smoothing")
     parser.add_argument('--save_intermediate', default=False, action="store_true",
                         help="Save intermediate results per year")
@@ -646,9 +674,9 @@ if __name__ == '__main__':
     parser.add_argument("--evaluate_saint_on_cpu", default=False, action='store_true', help="Run the eval step of GraphSAINT on CPU")
     parser.add_argument('--comment', type=str, default='', help="Some comment for logging purposes.")
     parser.add_argument('--label_rate', type=float, default=None, help="Label rate (needs to be preprocessed)")
-    parser.add_argument('--open-learning', default=None, help="Method for self detection of unseen classes", default=None
-            choices=["DOC"])
     add_node2vec_args(parser)
+
+    open_learning.add_args(parser)
 
     ARGS = parser.parse_args()
 
@@ -697,7 +725,8 @@ if __name__ == '__main__':
             }[ARGS.dataset]
             print("Using t_start =", ARGS.t_start)
         except KeyError:
-            print("No default for dataset '{}'. Please provide '--t_start'.".format(ARGS.dataset))
+            print("No default for dataset '{}'. Please provide '--t_start'."
+                  .format(ARGS.dataset))
             exit(1)
 
     # Backward compatibility:
@@ -706,14 +735,15 @@ if __name__ == '__main__':
     # ARGS.pretrain_until = ARGS.t_start - 1
     # Not needed anymore
 
-
     # Sanity checks #
     if ARGS.model == 'node2vec':
         # Sanity checks
         if 'warm' in ARGS.start:
-            raise NotImplementedError("Node2vec with warm starts is not yet supported")
+            raise NotImplementedError("Node2vec w/ warm starts not supported")
         else:
             ARGS.start = 'legacy-cold'
             print(f"Using '{ARGS.start}' restart mode for Node2Vec.")
+    elif ARGS.model == 'graphsaint':
+        assert ARGS.inductive, "GraphSAINT only works for inductive mode"
 
     main(ARGS)
