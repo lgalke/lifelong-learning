@@ -646,6 +646,8 @@ if __name__ == '__main__':
     parser.add_argument("--evaluate_saint_on_cpu", default=False, action='store_true', help="Run the eval step of GraphSAINT on CPU")
     parser.add_argument('--comment', type=str, default='', help="Some comment for logging purposes.")
     parser.add_argument('--label_rate', type=float, default=None, help="Label rate (needs to be preprocessed)")
+    parser.add_argument('--open-learning', default=None, help="Method for self detection of unseen classes", default=None
+            choices=["DOC"])
     add_node2vec_args(parser)
 
     ARGS = parser.parse_args()
