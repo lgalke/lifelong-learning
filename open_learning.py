@@ -1,7 +1,5 @@
 from abc import ABC, abstractmethod
 import torch
-import torch.nn as nn
-
 
 class OpenLearning(ABC):
     """ Abstract base class for open world learning """
@@ -30,7 +28,6 @@ class OpenLearning(ABC):
         return reject_mask, predictions, loss
 
 
-
 class DOC(OpenLearning):
     """
     Deep Open ClassificatioN: Sigmoidal activation + Threshold based rejection
@@ -52,22 +49,26 @@ class DOC(OpenLearning):
 
         num_classes = logits.size(1)
         # posterior "probabilities" p(y=l_i | x_j, y_j = li)
-        points = logits.detach().sigmoid()  # [bsz, num_classes]
+        points = logits.detach().sigmoid()  # [num_examples, num_classes]
 
         # for each existing point,
         # create a mirror point (not a probability),
         # mirrored on the mean of 1
-        mirror_points = 1 + ( 1 - y )  # [bsz, num_classes]
+        mirror_points = 1 + ( 1 - y )  # [num_examples, num_classes]
 
         # estimate the standard deviation per class
         # using both existing and the created points
-        all_points = torch.cat(points, mirror_points)
-        std_per_class = all_points.std(dim=0, unbiased=True)  # TODO: unbiased SD? orig work did not specify...
+        all_points = torch.cat(points, mirror_points) # [2*num_examples, num_classes]
+        std_per_class = all_points.std(dim=0, unbiased=True)  # [num_classes]
+        # TODO: unbiased SD? orig work did not specify...
 
-        # Set the probability threshold t_i = max(0.5, 1 - alpha SD_i)
-        thresholds_per_class = (1 - self.alpha * std_per_class).clamp(0.5) # TODO: Orig paper uses 0.5, we could also use a specified minimum threshold
+        # Set the probability threshold t_i = max(0.5, 1 - alpha * SD_i)
+        thresholds_per_class = (1 - self.alpha * std_per_class).clamp(0.5)  # [num_classes]
+        # TODO: Orig paper uses base threshold 0.5, we could also use a specified minimum threshold
 
-        self.threshold = thresholds_per_class
+        self.threshold = thresholds_per_class  # [num_classes]
+
+        return self
 
     def reject(self, logits):
         y_proba = logits.detach().sigmoid()
