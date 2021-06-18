@@ -129,9 +129,10 @@ def evaluate(model, g, feats, labels, mask=None, compute_loss=True,
             labels = labels[mask]
 
         if compute_loss:
-            loss = F.cross_entropy(logits, labels).item()
-        else:
-            loss = None
+            if open_learning_model is None:
+                loss = F.cross_entropy(logits, labels).item()
+            else:
+                loss = open_learning_model.loss(logits, labels).item()
 
         if isinstance(logits, np.ndarray):
             logits = torch.FloatTensor(logits)
@@ -139,11 +140,22 @@ def evaluate(model, g, feats, labels, mask=None, compute_loss=True,
         acc = (max_indices == labels).sum().float() / labels.size(0)
         f1 = f1_score(labels.cpu(), max_indices.cpu(), average="macro")
 
-        if open_learning_model is not None:
-            # TODO conduct open learning evaluation
-            raise NotImplementedError("Open space evaluation not implemented")
+        scores = {
+            'accuracy': acc.item(),
+            'f1_macro': f1,
+            'loss': loss
+        }
 
-    return acc.item(), f1, loss
+        if open_learning_model is not None:
+            reject_mask = open_learning_model.reject(logits)
+            predictions = open_learning_model.predict(logits)
+            reject_mask, predictions, __loss = open_learning_model(logits)
+            open_scores = open_learning.evaluate(labels, new_classes,
+                                                 predictions, reject_mask)
+            scores.update(open_scores)
+
+    # return acc.item(), f1, loss
+    return scores
 
 
 def build_model(args, in_feats, n_hidden, n_classes, device, n_layers=1, backend='geometric'):
@@ -300,7 +312,9 @@ RESULT_COLS = ['dataset',
                'year',
                'epoch',
                'f1_macro',
-               'accuracy']
+               'accuracy',
+               'open_mcc',
+               'open_f1_macro']
 
 
 def main(args):
@@ -367,8 +381,15 @@ def main(args):
 
     results_df = pd.DataFrame(columns=RESULT_COLS)
 
-    def attach_score(df, year, epoch, accuracy, f1):
+    def attach_score(df, year, epoch, scores):
         """ Partial """
+        f1 = scores['f1_macro']
+        accuracy = scores['accuracy']
+
+        # Only present w/ open world learning, but keep same table structure
+        open_f1 = scores.get('open_f1_macro', np.NaN)
+        open_mcc = scores.get('open_mcc', np.NaN)
+
         return df.append(
             pd.DataFrame(
                 [[args.dataset,
@@ -398,7 +419,10 @@ def main(args):
                   year,
                   epoch,
                   f1,
-                  accuracy]],
+                  accuracy,
+                  open_mcc,
+                  open_f1
+                  ]],
                 columns=RESULT_COLS),
             ignore_index=True)
 
@@ -458,20 +482,23 @@ def main(args):
 
         if args.model == 'mostfrequent':
             assert args.subsample_train is None, "MostFrequent not impl. for subsample train"
+            assert args.open_learning is None, "Open Learning not impl. for mostfrequent"
             assert args.inductive
             if epochs > 0:
                 # Re-fit only if uptraining is in general allowed!
                 model.fit(None, train_task.y)
             del train_task
-            acc, f1, _ = evaluate(model,
+            scores = evaluate(model,
                               task.graph(),
                               task.x,
                               task.y,
                               mask=task.test_mask,
                               compute_loss=False)
+            acc, f1 = scores['accuracy'], scores['f1_macro']
         elif args.model == 'node2vec':
             assert args.subsample_train is None, "MostFrequent not impl. for subsample train"
             assert not args.inductive, "Node2vec can only be applied transductively"
+            assert args.open_learning is None, "Open Learning not impl. for node2vec"
             train_node2vec(model, optimizer, epochs=epochs,
                            batch_size=args.n2v_batch_size,
                            shuffle=True,
@@ -552,26 +579,27 @@ def main(args):
                       backend=backend,
                       open_learning_model=olg_model)
 
-            acc, f1, test_loss = evaluate(model,
-                                          task.graph(),
-                                          task.x,
-                                          task.y,
-                                          mask=task.test_mask,
-                                          compute_loss=True,
-                                          backend=backend)
+            # acc, f1, test_loss = evaluate(model,  # <- old
+            scores = evaluate(model,
+                              task.graph(),
+                              task.x,
+                              task.y,
+                              mask=task.test_mask,
+                              compute_loss=True,
+                              backend=backend,
+                              open_learning_model=olg_model,
+                              new_classes=new_classes)
 
         print(f"[{current_year} ~ Epoch {epochs}] Test Accuracy: {acc:.4f}")
 
-        results_df = attach_score(results_df, current_year, epochs, acc, f1)
+        results_df = attach_score(results_df, current_year, epochs, scores)
 
         if USE_WANDB:
-            wandb.log({ "task_id": current_year,
-                        "test/accuracy": acc,
-                        "test/f1_macro": f1,
-                        "test/loss": test_loss
-                        })
-
-
+            # Prefix with 'test/' to improve structure in wandb dashboard
+            log_dict = {'test/'+k: v for k, v in scores.items()}
+            log_dict["task_id"] = current_year
+            log_dict["task_index"] = t
+            wandb.log(log_dict)
 
         # input() # debug purposes
         # DROP ALL STUFF COMPUTED FOR CURRENT WINDOW (no memory leaks)
@@ -579,6 +607,7 @@ def main(args):
         gc.collect()
         torch.cuda.empty_cache()
 
+        # Memory leak debugging, not needed.
         # for obj in gc.get_objects():
         #     try:
         #         if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
@@ -591,11 +620,16 @@ def main(args):
         # This makes WandB compute summary metrics for accuracy and f1 macro
         # including the average!
         # TODO: be careful when more than one accuracy per task is stored in results
-        # (currently not a problem, as we only store one set of values per task)
+        # (currently not a problem, as we only store one set of scores per task)
         wandb.run.summary["test/avg_accuracy"] = results_df["accuracy"].values.mean()
         wandb.run.summary["test/sd_accuracy"] = results_df["accuracy"].values.std(ddof=1)
         wandb.run.summary["test/avg_f1_macro"] = results_df["f1_macro"].values.mean()
         wandb.run.summary["test/sd_f1_macro"] = results_df["f1_macro"].values.std(ddof=1)
+
+        wandb.run.summary["test/avg_open_f1_macro"] = results_df["open_f1_macro"].values.mean()
+        wandb.run.summary["test/sd_open_f1_macro"] = results_df["open_f1_macro"].values.std(ddof=1)
+        wandb.run.summary["test/avg_open_mcc"] = results_df["open_mcc"].values.mean()
+        wandb.run.summary["test/sd_open_mcc"] = results_df["open_mcc"].values.std(ddof=1)
         # wandb.run.summary.update()
 
     if args.save is not None:

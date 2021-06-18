@@ -113,7 +113,9 @@ class OpenMax(OpenLearning):
     pass
 
 
-# Module-level functions
+##########################
+# Module-level functions #
+##########################
 
 def add_args(parser):
     parser.add_argument('--open_learning', default=None,
@@ -139,8 +141,23 @@ def build(args):
         raise NotImplementedError(f"Unknown key: {args.open_learning}")
 
 
-def evaluate_open_learning(predictions, reject_mask,
-                           true_labels, unknown_classes):
-    # TODO: f1 macro including pseudo-class for unknown
-    # TODO: Matthews for hit or miss?
-    raise NotImplementedError("Open Learning eval not impl.")
+def evaluate(labels, unseen_classes,
+             predictions, reject_mask):
+    import numpy as np
+    from sklearn.metrics import matthews_corrcoef, f1_score
+    labels = np.asarray(labels)
+    unseen = list(unseen_classes)
+    predictions = np.asarray(labels)
+    reject_mask = np.asarray(reject_mask)
+
+    # MCC
+    true_reject = np.zeros(labels.size(0))
+    true_reject[unseen] = 1
+    mcc = matthews_corrcoef(true_reject, reject_mask)
+
+    # Open F1 Macro
+    labels[unseen] = -1
+    predictions[reject_mask] = -1
+    f1_macro = f1_score(labels, predictions, average='macro')
+
+    return {'open_mcc': mcc, 'open_f1_macro': f1_macro}
