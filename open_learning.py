@@ -1,5 +1,9 @@
 """ Module for Open Learning """
 from abc import ABC, abstractmethod
+
+import numpy as np
+from sklearn.metrics import matthews_corrcoef, f1_score
+
 import torch
 from torch.nn import Module
 
@@ -61,7 +65,9 @@ class DeepOpenClassification(OpenLearning):
         self.min_threshold = threshold
 
     def loss(self, logits, labels):
-        return self.criterion(logits, labels)
+        targets = torch.nn.functional.one_hot(labels,
+                                              num_classes=logits.size(1))
+        return self.criterion(logits, targets.float())
 
     def fit(self, logits, labels):
         """ Gaussian fitting of the thresholds per class.
@@ -143,21 +149,33 @@ def build(args):
 
 def evaluate(labels, unseen_classes,
              predictions, reject_mask):
-    import numpy as np
-    from sklearn.metrics import matthews_corrcoef, f1_score
+
+    # TODO What happens if unseen classes is the empty set
+
+    # Shift stuff to CPU
+    labels = labels.cpu()
+    predictions = predictions.cpu()
+    reject_mask = reject_mask.cpu()
+
+
     labels = np.asarray(labels)
     unseen = list(unseen_classes)
-    predictions = np.asarray(labels)
+    predictions = np.asarray(predictions)
     reject_mask = np.asarray(reject_mask)
 
+
+    ### TODO we need some kind of .isin() to filter for unseen classes
+    ### Now we are indexing wrong FIXME
+
     # MCC
-    true_reject = np.zeros(labels.size(0))
-    true_reject[unseen] = 1
+    true_reject = np.isin(labels, unseen)
     mcc = matthews_corrcoef(true_reject, reject_mask)
 
     # Open F1 Macro
-    labels[unseen] = -1
+    labels[true_reject] = -1
+    print("True lables with -1 for unseen:", labels, labels.shape)
     predictions[reject_mask] = -1
+    print("Predictions including rejected:", predictions, predictions.shape)
     f1_macro = f1_score(labels, predictions, average='macro')
 
     return {'open_mcc': mcc, 'open_f1_macro': f1_macro}

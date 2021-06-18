@@ -304,7 +304,10 @@ class LifelongNodeClassificationDataset(torch.utils.data.Dataset):
         self.t_min = int(info['t_min'])
         self.t_max = int(info['t_max'])
         self.backend = str(info['backend'])
-        self.label_rate = float(info['label_rate'])
+        if 'label_rate' in info:
+            self.label_rate = float(info['label_rate'])
+        else:
+            self.label_rate = None
         self.inductive = inductive
 
     def __repr__(self):

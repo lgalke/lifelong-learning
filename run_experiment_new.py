@@ -79,16 +79,21 @@ def train(model, optimizer, g, feats, labels, mask=None, epochs=1,
         print("Resetting Model Cache")
         model.__reset_cache__()
 
+    if mask is not None:
+        # Reduce view alreayd here rather than in each epoch (prevent bugs)
+        labels = labels[mask]
+
     for epoch in range(epochs):
         inputs = (g, feats) if backend == 'dgl' else (feats, g)
-        logits = model(*inputs)
 
+        logits = model(*inputs)
         if mask is not None:
             logits = logits[mask]
-            labels = labels[mask]
 
         if open_learning_model is not None:
             # The open learning model defines the loss
+            # print("Logits", logits.size(), logits.dtype)
+            # print("Labels", labels.size(), labels.dtype)
             loss = open_learning_model.loss(logits, labels)
         else:
             # Standard cross entropy training
@@ -105,15 +110,18 @@ def train(model, optimizer, g, feats, labels, mask=None, epochs=1,
         myloss = loss.detach().item()
         myepoch = epoch + 1
         wandb.log({"epoch": myepoch, "train/loss": myloss})
-        print("Epoch {:d} | Loss: {:.4f}".format(myepoch, myloss))
+        print("\rEpoch {:d} | Loss: {:.4f}".format(myepoch, myloss),
+              flush=True, end='')
 
     if open_learning_model is not None:
         print("Fitting Open Learning Model")
         open_learning_model.fit(logits, labels)
+        print(open_learning_model)
 
 
 def evaluate(model, g, feats, labels, mask=None, compute_loss=True,
-             backend='dgl', open_learning_model=None, new_classes: set = None):
+             backend='dgl',
+             open_learning_model=None, unseen_classes: set = None):
     model.eval()
 
     if hasattr(model, '__reset_cache__'):
@@ -124,6 +132,7 @@ def evaluate(model, g, feats, labels, mask=None, compute_loss=True,
         inputs = (g, feats) if backend == 'dgl' else (feats, g)
         logits = model(*inputs)
 
+        # Reduce view on test mask
         if mask is not None:
             logits = logits[mask]
             labels = labels[mask]
@@ -149,8 +158,7 @@ def evaluate(model, g, feats, labels, mask=None, compute_loss=True,
         if open_learning_model is not None:
             reject_mask = open_learning_model.reject(logits)
             predictions = open_learning_model.predict(logits)
-            reject_mask, predictions, __loss = open_learning_model(logits)
-            open_scores = open_learning.evaluate(labels, new_classes,
+            open_scores = open_learning.evaluate(labels, unseen_classes,
                                                  predictions, reject_mask)
             scores.update(open_scores)
 
@@ -431,8 +439,12 @@ def main(args):
                                              batch_size=1,
                                              collate_fn=collate_tasks)
 
-    if args.open_learning:
+    if args.open_learning is not None:
         olg_model = open_learning.build(args)
+        print("Open Learning Model:", olg_model)
+    else:
+        # backward compat
+        olg_model = None
 
     for t, batch in enumerate(taskloader):
         if args.only_first_task and t > 0:
@@ -447,6 +459,11 @@ def main(args):
         current_year = task.task_id
 
         print("Batch:", batch)
+        print("Task:", task)
+        print("Train mask:", task.train_mask.size())
+        print("Test mask:", task.test_mask.size())
+        print("Feats:", task.x.size())
+        print("Labels:", task.y.size())
 
         if args.decay is not None:
             if args.inductive:
@@ -468,9 +485,12 @@ def main(args):
         if args.inductive:
             # Task is used completely for training
             new_classes = set(train_task.y.numpy()) - known_classes
+            unseen_classes = set(task.y.numpy()) - known_classes - new_classes
         else:
             new_classes = set(task.y[task.train_mask].numpy()) - known_classes
-        print(f"New classes at time {current_year}:", new_classes)
+            unseen_classes = set(task.y[task.test_mask].numpy()) - known_classes - new_classes
+        print(f"New classes at train time {current_year}:", new_classes)
+        print(f"Unseen classes at test time {current_year}:", unseen_classes)
 
         # Perform a restart (beginning with 2nd task)
         if t > 0:
@@ -588,9 +608,10 @@ def main(args):
                               compute_loss=True,
                               backend=backend,
                               open_learning_model=olg_model,
-                              new_classes=new_classes)
+                              unseen_classes=unseen_classes)
 
-        print(f"[{current_year} ~ Epoch {epochs}] Test Accuracy: {acc:.4f}")
+        # print(f"[{current_year} ~ Epoch {epochs}] Test Accuracy: {acc:.4f}")
+        print(f"[{current_year} ~ Epoch {epochs}] Scores: {scores}")
 
         results_df = attach_score(results_df, current_year, epochs, scores)
 
