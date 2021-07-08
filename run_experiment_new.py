@@ -293,6 +293,21 @@ def restart(model, mode, known_classes: set, new_classes: set):
         raise NotImplementedError("Unknown --start arg: '%s'" % mode)
     return model
 
+def zero_unseen_classes(model, unseen_classes: set):
+    print(f"Setting params to zero for {len(unseen_classes)} classes")
+    unseen_class_ids = torch.LongTensor(list(unseen_classes))
+    for params in model.final_parameters():
+        if params.dim() == 1:  # bias vector
+            params.data[unseen_class_ids] = -1e12  # big negative bias
+        elif params.dim() == 2:  # weight matrix
+            params.data[unseen_class_ids, :] = 0   # zero weights
+        else:
+            NotImplementedError("Parameter dim > 2 ?")
+
+    return model
+
+
+
 RESULT_COLS = ['dataset',
                'label_rate',
                'inductive',
@@ -435,6 +450,7 @@ def main(args):
             ignore_index=True)
 
     known_classes = set()
+    all_classes = set(range(dataset.num_classes))
     taskloader = torch.utils.data.DataLoader(dataset, shuffle=False,
                                              batch_size=1,
                                              collate_fn=collate_tasks)
@@ -485,18 +501,22 @@ def main(args):
         if args.inductive:
             # Task is used completely for training
             new_classes = set(train_task.y.numpy()) - known_classes
-            unseen_classes = set(task.y.numpy()) - known_classes - new_classes
+            # unseen_classes = set(task.y.numpy()) - known_classes - new_classes
         else:
             new_classes = set(task.y[task.train_mask].numpy()) - known_classes
-            unseen_classes = set(task.y[task.test_mask].numpy()) - known_classes - new_classes
+            # unseen_classes = set(task.y[task.test_mask].numpy()) - known_classes - new_classes
+
         print(f"New classes at train time {current_year}:", new_classes)
-        print(f"Unseen classes at test time {current_year}:", unseen_classes)
 
         # Perform a restart (beginning with 2nd task)
         if t > 0:
             restart(model, args.start, known_classes, new_classes)
         # Add new classes to known classes
         known_classes |= new_classes
+
+        # All classes that are not in the training set of t are unseen
+        unseen_classes = all_classes - known_classes
+        print(f"Unseen classes at test time {current_year}:", unseen_classes)
 
         test_loss = None  # fall-back if evaluate model doesn't emit loss
 
@@ -600,6 +620,10 @@ def main(args):
                       open_learning_model=olg_model)
 
             # acc, f1, test_loss = evaluate(model,  # <- old
+
+            # inplace
+            # model = zero_unseen_classes(model, unseen_classes)
+
             scores = evaluate(model,
                               task.graph(),
                               task.x,

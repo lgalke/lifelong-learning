@@ -90,9 +90,10 @@ class DeepOpenClassification(OpenLearning):
 
         # estimate the standard deviation per class
         # using both existing and the created points
-        all_points = torch.cat(y, y_mirror)  # [2*num_examples, num_classes]
+        all_points = torch.cat([y, y_mirror], dim=0)  # [2*num_examples, num_classes]
         std_per_class = all_points.std(dim=0, unbiased=True)  # [num_classes]
         # TODO: unbiased SD? orig work did not specify...
+        print("SD per class:\n", std_per_class)
 
         # Set the probability threshold t_i = max(0.5, 1 - alpha * SD_i)
         thresholds_per_class = (1 - self.alpha * std_per_class).clamp(0.5)
@@ -100,6 +101,7 @@ class DeepOpenClassification(OpenLearning):
         # we could also use a specified minimum threshold
 
         self.threshold = thresholds_per_class  # [num_classes]
+        print("Updated thresholds:\n", self.threshold)
 
         return self
 
@@ -109,7 +111,9 @@ class DeepOpenClassification(OpenLearning):
         return reject_mask
 
     def predict(self, logits):
+        print("Logits\n", logits)
         y_proba = logits.detach().sigmoid()
+        print("Logits after sigmoid", y_proba)
         # Basic argmax
         __max_vals, max_indices = torch.max(y_proba, dim=1)
         return max_indices
@@ -147,10 +151,13 @@ def build(args):
         raise NotImplementedError(f"Unknown key: {args.open_learning}")
 
 
+def bool2pmone(x):
+    x = np.asarray(x, dtype=int)
+    return x * 2 - 1
+
+
 def evaluate(labels, unseen_classes,
              predictions, reject_mask):
-
-    # TODO What happens if unseen classes is the empty set
 
     # Shift stuff to CPU
     labels = labels.cpu()
@@ -163,18 +170,15 @@ def evaluate(labels, unseen_classes,
     predictions = np.asarray(predictions)
     reject_mask = np.asarray(reject_mask)
 
-
-    ### TODO we need some kind of .isin() to filter for unseen classes
-    ### Now we are indexing wrong FIXME
-
     # MCC
     true_reject = np.isin(labels, unseen)
-    mcc = matthews_corrcoef(true_reject, reject_mask)
+    mcc = matthews_corrcoef(bool2pmone(true_reject),
+                            bool2pmone(reject_mask))
 
     # Open F1 Macro
-    labels[true_reject] = -1
-    print("True lables with -1 for unseen:", labels, labels.shape)
-    predictions[reject_mask] = -1
+    labels[true_reject] = -100
+    print("True lables with -100 for unseen:", labels, labels.shape)
+    predictions[reject_mask] = -100
     print("Predictions including rejected:", predictions, predictions.shape)
     f1_macro = f1_score(labels, predictions, average='macro')
 
