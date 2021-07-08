@@ -96,9 +96,9 @@ class DeepOpenClassification(OpenLearning):
         print("SD per class:\n", std_per_class)
 
         # Set the probability threshold t_i = max(0.5, 1 - alpha * SD_i)
-        thresholds_per_class = (1 - self.alpha * std_per_class).clamp(0.5)
-        # TODO: Orig paper uses base threshold 0.5,
-        # we could also use a specified minimum threshold
+        # Orig paper uses base threshold 0.5,
+        # but we use a specified minimum threshold
+        thresholds_per_class = (1 - self.alpha * std_per_class).clamp(self.min_threshold)
 
         self.threshold = thresholds_per_class  # [num_classes]
         print("Updated thresholds:\n", self.threshold)
