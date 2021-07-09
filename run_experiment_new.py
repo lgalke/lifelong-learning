@@ -34,6 +34,8 @@ from lifelong_learning import lifelong_nodeclf_identifier
 from lifelong_learning import LifelongNodeClassificationDataset
 from lifelong_learning import collate_tasks
 
+from resultswriter import CSVResultsWriter
+
 import open_learning
 
 try:
@@ -44,20 +46,6 @@ except ImportError:
     print("Not using weightsandbiases integration. To use `pip install wandb`")
 
 
-def appendDFToCSV_void(df, csvFilePath, sep=","):
-    """ Safe appending of a pandas df to csv file
-    Source: https://stackoverflow.com/questions/17134942/pandas-dataframe-output-end-of-csv
-    """
-    if not os.path.isfile(csvFilePath):
-        df.to_csv(csvFilePath, mode='a', index=False, sep=sep)
-    elif len(df.columns) != len(pd.read_csv(csvFilePath, nrows=1, sep=sep).columns):
-        raise Exception(
-            "Columns do not match!! Dataframe has " + str(len(df.columns)) + " columns. CSV file has " + str(
-                len(pd.read_csv(csvFilePath, nrows=1, sep=sep).columns)) + " columns.")
-    elif not (df.columns == pd.read_csv(csvFilePath, nrows=1, sep=sep).columns).all():
-        raise Exception("Columns and column order of dataframe and csv file do not match!!")
-    else:
-        df.to_csv(csvFilePath, mode='a', index=False, sep=sep, header=False)
 
 
 def compute_weights(ts, exponential_decay, initial_quantity=1.0, normalize=True):
@@ -308,36 +296,6 @@ def zero_unseen_classes(model, unseen_classes: set):
 
 
 
-RESULT_COLS = ['dataset',
-               'label_rate',
-               'inductive',
-               'seed',
-               'backend',
-               'model',
-               'variant',
-               'n_params',
-               'n_hidden',
-               'n_layers',
-               'dropout',
-               'history',
-               'sampling',
-               'batch_size',
-               'saint_coverage',
-               'limited_pretraining',
-               'initial_epochs',
-               'initial_lr',
-               'initial_wd',
-               'annual_epochs',
-               'annual_lr',
-               'annual_wd',
-               'start',
-               'decay',
-               'year',
-               'epoch',
-               'f1_macro',
-               'accuracy',
-               'open_mcc',
-               'open_f1_macro']
 
 
 def main(args):
@@ -402,52 +360,8 @@ def main(args):
     if args.only_count_params:
         exit(0)
 
-    results_df = pd.DataFrame(columns=RESULT_COLS)
 
-    def attach_score(df, year, epoch, scores):
-        """ Partial """
-        f1 = scores['f1_macro']
-        accuracy = scores['accuracy']
-
-        # Only present w/ open world learning, but keep same table structure
-        open_f1 = scores.get('open_f1_macro', np.NaN)
-        open_mcc = scores.get('open_mcc', np.NaN)
-
-        return df.append(
-            pd.DataFrame(
-                [[args.dataset,
-                  args.label_rate,
-                  args.inductive,
-                  args.seed,
-                  backend,
-                  args.model,
-                  args.variant,
-                  num_params,
-                  args.n_hidden,
-                  args.n_layers,
-                  args.dropout,
-                  args.history,
-                  args.sampling,
-                  args.batch_size,
-                  args.saint_coverage,
-                  True,  # Limited pretraining
-                  args.initial_epochs,
-                  args.lr,
-                  args.weight_decay,
-                  args.annual_epochs,
-                  args.lr * args.rescale_lr,
-                  args.weight_decay * args.rescale_wd,
-                  args.start,
-                  args.decay,
-                  year,
-                  epoch,
-                  f1,
-                  accuracy,
-                  open_mcc,
-                  open_f1
-                  ]],
-                columns=RESULT_COLS),
-            ignore_index=True)
+    rw = CSVResultsWriter(args)
 
     known_classes = set()
     all_classes = set(range(dataset.num_classes))
@@ -637,7 +551,14 @@ def main(args):
         # print(f"[{current_year} ~ Epoch {epochs}] Test Accuracy: {acc:.4f}")
         print(f"[{current_year} ~ Epoch {epochs}] Scores: {scores}")
 
-        results_df = attach_score(results_df, current_year, epochs, scores)
+        assert 'year' not in scores
+        assert 'epoch' not in scores
+        scores['year'] = current_year
+        scores['epoch'] = epochs
+
+        # results_df = attach_score(results_df, current_year, epochs, scores)
+
+        rw.add_result(scores)
 
         if USE_WANDB:
             # Prefix with 'test/' to improve structure in wandb dashboard
@@ -666,20 +587,27 @@ def main(args):
         # including the average!
         # TODO: be careful when more than one accuracy per task is stored in results
         # (currently not a problem, as we only store one set of scores per task)
-        wandb.run.summary["test/avg_accuracy"] = results_df["accuracy"].values.mean()
-        wandb.run.summary["test/sd_accuracy"] = results_df["accuracy"].values.std(ddof=1)
-        wandb.run.summary["test/avg_f1_macro"] = results_df["f1_macro"].values.mean()
-        wandb.run.summary["test/sd_f1_macro"] = results_df["f1_macro"].values.std(ddof=1)
+        wandb.run.summary["test/avg_accuracy"] = rw.data["accuracy"].values.mean()
+        wandb.run.summary["test/sd_accuracy"] = rw.data["accuracy"].values.std(ddof=1)
+        wandb.run.summary["test/avg_f1_macro"] = rw.data["f1_macro"].values.mean()
+        wandb.run.summary["test/sd_f1_macro"] = rw.data["f1_macro"].values.std(ddof=1)
 
-        wandb.run.summary["test/avg_open_f1_macro"] = results_df["open_f1_macro"].values.mean()
-        wandb.run.summary["test/sd_open_f1_macro"] = results_df["open_f1_macro"].values.std(ddof=1)
-        wandb.run.summary["test/avg_open_mcc"] = results_df["open_mcc"].values.mean()
-        wandb.run.summary["test/sd_open_mcc"] = results_df["open_mcc"].values.std(ddof=1)
+        wandb.run.summary["test/avg_open_f1_macro"] = rw.data["open_f1_macro"].values.mean()
+        wandb.run.summary["test/sd_open_f1_macro"] = rw.data["open_f1_macro"].values.std(ddof=1)
+        wandb.run.summary["test/avg_open_mcc"] = rw.data["open_mcc"].values.mean()
+        wandb.run.summary["test/sd_open_mcc"] = rw.data["open_mcc"].values.std(ddof=1)
         # wandb.run.summary.update()
+
+        wandb.run.summary["test/open_tp"] = rw.data["open_tp"].values.sum()
+        wandb.run.summary["test/open_tn"] = rw.data["open_tn"].values.sum()
+        wandb.run.summary["test/open_fp"] = rw.data["open_fp"].values.sum()
+        wandb.run.summary["test/open_fn"] = rw.data["open_fn"].values.sum()
 
     if args.save is not None:
         print("Saving final results to", args.save)
-        appendDFToCSV_void(results_df, args.save)
+        # appendDFToCSV_void(results_df, args.save)
+
+        rw.write()
 
 
 DATASET_PATHS = {

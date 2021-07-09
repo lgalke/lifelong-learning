@@ -4,6 +4,8 @@ from abc import ABC, abstractmethod
 import numpy as np
 from sklearn.metrics import matthews_corrcoef, f1_score
 
+from sklearn.metrics.cluster import contingency_matrix
+
 import torch
 from torch.nn import Module
 
@@ -152,6 +154,7 @@ def build(args):
 
 
 def bool2pmone(x):
+    """ Converts boolean mask to {-1,1}^N int array """
     x = np.asarray(x, dtype=int)
     return x * 2 - 1
 
@@ -170,10 +173,28 @@ def evaluate(labels, unseen_classes,
     predictions = np.asarray(predictions)
     reject_mask = np.asarray(reject_mask)
 
-    # MCC
     true_reject = np.isin(labels, unseen)
+
+    # Contingency matrix
+
+    cont = contingency_matrix(true_reject, reject_mask)
+
+    # Cont[i, j]
+    #         true i
+    #            predicted j
+
+    tp = cont[0, 0]
+    tn = cont[1, 1]
+    fp = cont[0, 1]
+    fn = cont[1, 0]
+
+
+
+    # MCC
     mcc = matthews_corrcoef(bool2pmone(true_reject),
                             bool2pmone(reject_mask))
+
+
 
     # Open F1 Macro
     labels[true_reject] = -100
@@ -182,4 +203,5 @@ def evaluate(labels, unseen_classes,
     print("Predictions including rejected:", predictions, predictions.shape)
     f1_macro = f1_score(labels, predictions, average='macro')
 
-    return {'open_mcc': mcc, 'open_f1_macro': f1_macro}
+    return {'open_mcc': mcc, 'open_f1_macro': f1_macro,
+            'open_tp': tp, 'open_tn': tn, 'open_fp': fp, 'open_fn': fn}
