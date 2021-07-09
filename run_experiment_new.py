@@ -607,7 +607,7 @@ def main(args):
         print("Saving final results to", args.save)
         # appendDFToCSV_void(results_df, args.save)
 
-        rw.write()
+        rw.write(args.save)
 
 
 DATASET_PATHS = {
