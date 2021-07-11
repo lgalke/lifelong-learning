@@ -32,10 +32,10 @@ RESULT_COLS = ['dataset',
                'epoch',
                'f1_macro',
                'accuracy',
-               'open_TP',
-               'open_TN',
-               'open_FP',
-               'open_FN',
+               'open_tp',
+               'open_tn',
+               'open_fp',
+               'open_fn',
                'open_mcc',
                'open_f1_macro']
 
@@ -95,7 +95,7 @@ class CSVResultsWriter:
                   scores['open_fp'],
                   scores['open_fn'],
                   scores['open_mcc'],
-                  scores['open_f1']
+                  scores['open_f1_macro']
                   ]],
                 columns=RESULT_COLS),
             ignore_index=True)

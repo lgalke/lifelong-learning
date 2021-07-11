@@ -4,7 +4,6 @@ from abc import ABC, abstractmethod
 import numpy as np
 from sklearn.metrics import matthews_corrcoef, f1_score
 
-from sklearn.metrics.cluster import contingency_matrix
 
 import torch
 from torch.nn import Module
@@ -48,7 +47,8 @@ class DeepOpenClassification(OpenLearning):
     This module will apply sigmoid activations.
     """
     def __init__(self, threshold: float = 0.5,
-                 reduce_risk: bool = False, alpha: float = 3.0, **kwargs):
+                 reduce_risk: bool = False, alpha: float = 3.0,
+                 num_classes=None, **kwargs):
         """
         Arguments
         ---------
@@ -61,6 +61,8 @@ class DeepOpenClassification(OpenLearning):
         self.reduce_risk = bool(reduce_risk)
         self.alpha = float(alpha)
         self.threshold = float(threshold)
+
+        self.num_classes = num_classes
 
         # Minimum threshold if reduce_risk is True,
         # allows to call fit() multiple times
@@ -80,21 +82,36 @@ class DeepOpenClassification(OpenLearning):
             print("[DOC/warning] fit() called but reduce_risk is False. Pass.")
             return self
 
-        # TODO: extend to online variant by computing *rolling* std. dev.?
-
-        # posterior "probabilities" p(y=l_i | x_j, y_j = li)
         y = logits.detach().sigmoid()  # [num_examples, num_classes]
 
-        # for each existing point,
-        # create a mirror point (not a probability),
-        # mirrored on the mean of 1
-        y_mirror = 1 + (1 - y)  # [num_examples, num_classes]
+        # TODO: extend to online variant by computing *rolling* std. dev.?
+        # posterior "probabilities" p(y=l_i | x_j, y_j = li)
+        uniq_labels = labels.unique()
+        if self.num_classes is None:
+            # Infer #classes
+            num_classes = len(uniq_labels)
+        else:
+            num_classes = self.num_classes
 
-        # estimate the standard deviation per class
-        # using both existing and the created points
-        all_points = torch.cat([y, y_mirror], dim=0)  # [2*num_examples, num_classes]
-        std_per_class = all_points.std(dim=0, unbiased=True)  # [num_classes]
-        # TODO: unbiased SD? orig work did not specify...
+        std_per_class = torch.zeros(num_classes)
+
+        for i in uniq_labels:
+            # Filter for y_j == li
+            y_i = y[labels == i, i]
+
+            # for each existing point,
+            # create a mirror point (not a probability),
+            # mirrored on the mean of 1
+            y_i_mirror = 1 + (1 - y_i)  # [num_examples, num_classes]
+
+            # estimate the standard deviation per class
+            # using both existing and the created points
+            y_i_all = torch.cat([y_i, y_i_mirror], dim=0)
+            # TODO: unbiased SD? orig work did not specify...
+            std_i = y_i_all.std(dim=0, unbiased=True)  # scalar
+
+            std_per_class[i] = std_i
+
         print("SD per class:\n", std_per_class)
 
         # Set the probability threshold t_i = max(0.5, 1 - alpha * SD_i)
@@ -133,7 +150,7 @@ def add_args(parser):
     parser.add_argument('--open_learning', default=None,
                         help="Method for self detection of unseen classes",
                         choices=["doc"])
-    parser.add_argument('--doc_threshold', default=0.5,
+    parser.add_argument('--doc_threshold', default=0.5, type=float,
                         help="Threshold for DOC")
     parser.add_argument('--doc_reduce_risk',
                         default=False, action='store_true',
@@ -142,11 +159,12 @@ def add_args(parser):
                         help="Alpha for DOC")
 
 
-def build(args):
+def build(args, num_classes=None):
     if args.open_learning == "doc":
         return DeepOpenClassification(threshold=args.doc_threshold,
                                       reduce_risk=args.doc_reduce_risk,
-                                      alpha=args.doc_alpha)
+                                      alpha=args.doc_alpha,
+                                      num_classes=num_classes)
     elif args.open_learning == "openmax":
         raise NotImplementedError("OpenMax not yet implemented")
     else:
@@ -173,22 +191,21 @@ def evaluate(labels, unseen_classes,
     predictions = np.asarray(predictions)
     reject_mask = np.asarray(reject_mask)
 
+    print("Labels", labels)
+    print("Unseen", unseen)
     true_reject = np.isin(labels, unseen)
+    print("True reject", true_reject)
+    print("Reject mask", reject_mask)
 
-    # Contingency matrix
+    print("False in true_reject:", False in true_reject)
+    print("True in true_reject:", True in true_reject)
+    print("False in reject_mask:", False in reject_mask)
+    print("True in reject_mask:", True in reject_mask)
 
-    cont = contingency_matrix(true_reject, reject_mask)
-
-    # Cont[i, j]
-    #         true i
-    #            predicted j
-
-    tp = cont[0, 0]
-    tn = cont[1, 1]
-    fp = cont[0, 1]
-    fn = cont[1, 0]
-
-
+    tp = (reject_mask & true_reject).sum()
+    tn = (~reject_mask & ~true_reject).sum()
+    fp = (reject_mask & ~true_reject).sum()
+    fn = (~reject_mask & true_reject).sum()
 
     # MCC
     mcc = matthews_corrcoef(bool2pmone(true_reject),

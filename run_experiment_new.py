@@ -5,7 +5,6 @@ import os
 import gc
 
 import numpy as np
-import pandas as pd
 import dgl
 import torch_geometric as tg
 import torch
@@ -370,7 +369,7 @@ def main(args):
                                              collate_fn=collate_tasks)
 
     if args.open_learning is not None:
-        olg_model = open_learning.build(args)
+        olg_model = open_learning.build(args, num_classes=n_classes)
         print("Open Learning Model:", olg_model)
     else:
         # backward compat
@@ -553,7 +552,7 @@ def main(args):
 
         assert 'year' not in scores
         assert 'epoch' not in scores
-        scores['year'] = current_year
+        scores['task'] = current_year
         scores['epoch'] = epochs
 
         # results_df = attach_score(results_df, current_year, epochs, scores)
