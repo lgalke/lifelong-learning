@@ -108,7 +108,9 @@ def train(model, optimizer, g, feats, labels, mask=None, epochs=1,
 
 def evaluate(model, g, feats, labels, mask=None, compute_loss=True,
              backend='dgl',
-             open_learning_model=None, unseen_classes: set = None):
+             open_learning_model=None,
+             known_classes: set = None,
+             unseen_classes: set = None):
     model.eval()
 
     if hasattr(model, '__reset_cache__'):
@@ -143,8 +145,9 @@ def evaluate(model, g, feats, labels, mask=None, compute_loss=True,
         }
 
         if open_learning_model is not None:
-            reject_mask = open_learning_model.reject(logits)
-            predictions = open_learning_model.predict(logits)
+            subset = torch.LongTensor(list(known_classes))
+            reject_mask = open_learning_model.reject(logits, subset=subset)
+            predictions = open_learning_model.predict(logits, subset=subset)
             open_scores = open_learning.evaluate(labels, unseen_classes,
                                                  predictions, reject_mask)
             scores.update(open_scores)
@@ -545,6 +548,7 @@ def main(args):
                               compute_loss=True,
                               backend=backend,
                               open_learning_model=olg_model,
+                              known_classes=known_classes,
                               unseen_classes=unseen_classes)
 
         # print(f"[{current_year} ~ Epoch {epochs}] Test Accuracy: {acc:.4f}")

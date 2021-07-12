@@ -22,19 +22,19 @@ class OpenLearning(Module, ABC):
         return self
 
     @abstractmethod
-    def predict(self, logits):
+    def predict(self, logits, subset=None):
         """ Return most likely classes per instance """
         raise NotImplementedError("Abstract method called")
 
     @abstractmethod
-    def reject(self, logits):
+    def reject(self, logits, subset=None):
         """ Return example-wise mask to emit 1 if reject and 0 otherwise """
         raise NotImplementedError("Abstract method called")
 
-    def forward(self, logits, labels=None):
+    def forward(self, logits, labels=None, subset=None):
 
-        reject_mask = self.reject(logits)
-        predictions = self.predict(logits)
+        reject_mask = self.reject(logits, subset=subset)
+        predictions = self.predict(logits, subset=subset)
         loss = self.loss(logits, labels) if labels is not None else None
 
         return reject_mask, predictions, loss
@@ -124,17 +124,31 @@ class DeepOpenClassification(OpenLearning):
 
         return self
 
-    def reject(self, logits):
-        y_proba = logits.detach().sigmoid()
-        reject_mask = (y_proba < self.threshold).all(dim=1)
+    def reject(self, logits, subset=None):
+        with torch.no_grad():
+            if subset is not None:
+                logits = logits[subset]
+
+            y_proba = logits.sigmoid()
+
+
+            # Dim1 is reduced by 'all' anyways, no mapping back needed
+            reject_mask = (y_proba < self.threshold).all(dim=1)
         return reject_mask
 
-    def predict(self, logits):
-        print("Logits\n", logits)
-        y_proba = logits.detach().sigmoid()
-        print("Logits after sigmoid", y_proba)
-        # Basic argmax
-        __max_vals, max_indices = torch.max(y_proba, dim=1)
+    def predict(self, logits, subset=None):
+        with torch.no_grad():
+            if subset is not None:
+                print(f"Reducing view to {len(subset)} known classes")
+                logits = logits[subset]
+
+            print("Logits\n", logits)
+            y_proba = logits.sigmoid()
+            print("Logits after sigmoid\n", y_proba)
+
+
+            # Basic argmax
+            __max_vals, max_indices = torch.max(y_proba, dim=1)
         return max_indices
 
 
