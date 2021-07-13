@@ -93,7 +93,7 @@ class DeepOpenClassification(OpenLearning):
         else:
             num_classes = self.num_classes
 
-        std_per_class = torch.zeros(num_classes)
+        std_per_class = torch.zeros(num_classes, device=logits.device)
 
         for i in uniq_labels:
             # Filter for y_j == li
@@ -127,25 +127,30 @@ class DeepOpenClassification(OpenLearning):
     def reject(self, logits, subset=None):
         with torch.no_grad():
             if subset is not None:
-                logits = logits[subset]
+                logits = logits[:, subset]
+
+            # Reduce view on thresholds if subset is given,
+            # AND if self.threshold is not just a float
+            if subset is not None and not isinstance(self.threshold, float):
+                threshold = self.threshold[subset]
+            else:
+                threshold = self.threshold
 
             y_proba = logits.sigmoid()
 
-
             # Dim1 is reduced by 'all' anyways, no mapping back needed
-            reject_mask = (y_proba < self.threshold).all(dim=1)
+            reject_mask = (y_proba < threshold).all(dim=1)
         return reject_mask
 
     def predict(self, logits, subset=None):
         with torch.no_grad():
             if subset is not None:
                 print(f"Reducing view to {len(subset)} known classes")
-                logits = logits[subset]
+                logits = logits[:, subset]
 
             print("Logits\n", logits)
             y_proba = logits.sigmoid()
             print("Logits after sigmoid\n", y_proba)
-
 
             # Basic argmax
             __max_vals, max_indices = torch.max(y_proba, dim=1)
@@ -208,6 +213,8 @@ def evaluate(labels, unseen_classes,
     print("Labels", labels)
     print("Unseen", unseen)
     true_reject = np.isin(labels, unseen)
+    print(reject_mask.shape)
+    print(true_reject.shape)
     print("True reject", true_reject)
     print("Reject mask", reject_mask)
 

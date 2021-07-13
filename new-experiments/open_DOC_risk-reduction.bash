@@ -4,10 +4,8 @@ ANNUAL_EPOCHS=200
 NLAYERS=1
 BACKEND="dgl"
 ARGS="--n_layers $NLAYERS --weight_decay 0 --dropout 0.5 --rescale_lr 1.0 --rescale_wd 1. --annual_epochs $ANNUAL_EPOCHS --backend $BACKEND"
-# OLG_ARGS="--open_learning doc --doc_threshold 0.5 --doc_reduce_risk --doc_alpha 3.0"
-OLG_ARGS="--open_learning doc --doc_threshold 0.5"
 PRETRAIN_ARGS="--t_start $YEAR --initial_epochs $ANNUAL_EPOCHS"
-OUTFILE="results/olg_dblphard_GraphSAGE-first-exp-DOC.csv"
+OUTFILE="results/open_DOC_risk-reduction.csv"
 
 # Exit on error
 set -e
@@ -24,8 +22,12 @@ HPARAMS=(
 )
 
 for SEED in 10; do
-	for i in ${!HPARAMS[@]}; do
-		echo "${HPARAMS[$i]}"
-		python3 run_experiment_new.py ${HPARAMS[$i]} --seed "$SEED" --model gs-mean --n_hidden 32 $ARGS $PRETRAIN_ARGS --dataset "$DATA" $OLG_ARGS --save "$OUTFILE"
+	for DOC_THRESHOLD in "0.5" "0.25" "0.0"; do
+		OLG_ARGS="--open_learning doc --doc_threshold $DOC_THRESHOLD --doc_reduce_risk --doc_alpha 3.0"
+		for i in ${!HPARAMS[@]}; do
+			echo "${HPARAMS[$i]}"
+			python3 run_experiment_new.py ${HPARAMS[$i]} --seed "$SEED" --model gs-mean --n_hidden 32 $ARGS $PRETRAIN_ARGS --dataset "$DATA" $OLG_ARGS --save "$OUTFILE"
+		done
+
 	done
 done
