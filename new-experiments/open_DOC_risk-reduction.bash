@@ -21,12 +21,19 @@ HPARAMS=(
 	"--history 25 --start warm --lr 0.01"
 )
 
-for SEED in 10; do
-	for DOC_THRESHOLD in "0.5" "0.25" "0.0"; do
-		OLG_ARGS="--open_learning doc --doc_threshold $DOC_THRESHOLD --doc_reduce_risk --doc_alpha 3.0"
-		for i in ${!HPARAMS[@]}; do
-			echo "${HPARAMS[$i]}"
-			python3 run_experiment_new.py ${HPARAMS[$i]} --seed "$SEED" --model gs-mean --n_hidden 32 $ARGS $PRETRAIN_ARGS --dataset "$DATA" $OLG_ARGS --save "$OUTFILE"
+OLG_ARGS=(
+	"--open_learning doc --doc_threshold 0.5 --doc_reduce_risk --doc_alpha 3.0"
+	"--open_learning doc --doc_threshold 0.5 --doc_reduce_risk --doc_alpha 1.5"
+	"--open_learning doc --doc_threshold 0.25 --doc_reduce_risk --doc_alpha 1.5"
+	"--open_learning doc --doc_threshold 0.0 --doc_reduce_risk --doc_alpha 1.5"
+)
+
+for SEED in 10 11 12 13 14; do
+	for i in ${!HPARAMS[@]}; do
+		echo "${HPARAMS[$i]}"
+		for j in ${!OLG_ARGS[@]}; do
+			echo "${OLG_ARGS[$j]}"
+			python3 run_experiment_new.py ${HPARAMS[$i]} --seed "$SEED" --model gs-mean --n_hidden 32 $ARGS $PRETRAIN_ARGS --dataset "$DATA" ${OLG_ARGS[$j]} --save "$OUTFILE"
 		done
 
 	done

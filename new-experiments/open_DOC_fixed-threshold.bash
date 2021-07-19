@@ -26,6 +26,7 @@ for SEED in 10 11 12 13 14; do
 		OLG_ARGS="--open_learning doc --doc_threshold $DOC_THRESHOLD"
 		for i in ${!HPARAMS[@]}; do
 			echo "${HPARAMS[$i]}"
+			echo "$OLG_ARGS"
 			python3 run_experiment_new.py ${HPARAMS[$i]} --seed "$SEED" --model gs-mean --n_hidden 32 $ARGS $PRETRAIN_ARGS --dataset "$DATA" $OLG_ARGS --save "$OUTFILE"
 		done
 	done
