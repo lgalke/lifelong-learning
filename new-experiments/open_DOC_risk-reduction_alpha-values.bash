@@ -21,10 +21,10 @@ HPARAMS=(
 	# "--history 25 --start warm --lr 0.01"
 )
 
-for SEED in 10; do
+for SEED in 10 11 12 13 14; do
 	for DOC_THRESHOLD in "0.5" "0.25" "0.0"; do
-		# for DOC_ALPHA in "0.5" "1.0" "1.5" "2"; do
-		for DOC_ALPHA in "2.5" "3.0"; do
+		# for DOC_ALPHA in "0.5" "1.0" "1.5" "2" "2.5" "3.0"; do
+		for DOC_ALPHA in "0.75"; do
 			OLG_ARGS="--open_learning doc --doc_threshold $DOC_THRESHOLD --doc_reduce_risk --doc_alpha $DOC_ALPHA"
 			for i in ${!HPARAMS[@]}; do
 				echo "${HPARAMS[$i]}"
