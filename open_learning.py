@@ -205,16 +205,18 @@ def evaluate(labels, unseen_classes,
     reject_mask = reject_mask.cpu()
 
 
-    labels = np.asarray(labels)
+    # Copy because we will later insert -100 for unseen
+    labels = labels.clone().numpy()
+    predictions = predictions.clone().numpy()
+
     unseen = list(unseen_classes)
-    predictions = np.asarray(predictions)
     reject_mask = np.asarray(reject_mask)
 
     print("Labels", labels)
     print("Unseen", unseen)
     true_reject = np.isin(labels, unseen)
-    print(reject_mask.shape)
-    print(true_reject.shape)
+    # print(reject_mask.shape)
+    # print(true_reject.shape)
     print("True reject", true_reject)
     print("Reject mask", reject_mask)
 

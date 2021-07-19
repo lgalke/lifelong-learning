@@ -110,7 +110,8 @@ def evaluate(model, g, feats, labels, mask=None, compute_loss=True,
              backend='dgl',
              open_learning_model=None,
              known_classes: set = None,
-             unseen_classes: set = None):
+             unseen_classes: set = None,
+             save_logits=None):
     model.eval()
 
     if hasattr(model, '__reset_cache__'):
@@ -151,6 +152,23 @@ def evaluate(model, g, feats, labels, mask=None, compute_loss=True,
             open_scores = open_learning.evaluate(labels, unseen_classes,
                                                  predictions, reject_mask)
             scores.update(open_scores)
+
+            if save_logits is not None:
+                print("Saveing logits to", save_logits)
+                os.makedirs(save_logits, exist_ok=True)
+                # Save logits
+                np.savetxt(os.path.join(save_logits, "logits.gz"),
+                           logits.sigmoid().cpu().numpy())
+
+                # Save targets (same way as in open_learning.evaluate)
+                labels_numpy = labels.cpu().clone().numpy()
+                true_reject =  np.isin(labels_numpy, list(unseen_classes))
+                labels_numpy[true_reject] = -100
+                np.savetxt(os.path.join(save_logits, "labels.gz"),
+                           labels_numpy, fmt="%d")
+
+                # verify that we have not modified orig labels
+                assert -100 not in labels, "Data leak. Needs fix"
 
     # return acc.item(), f1, loss
     return scores
@@ -537,8 +555,10 @@ def main(args):
 
             # acc, f1, test_loss = evaluate(model,  # <- old
 
-            # inplace
-            # model = zero_unseen_classes(model, unseen_classes)
+            if args.save_logits_dir is not None:
+                save_logits = os.path.join(args.save_logits_dir, "t%02d" % t)
+            else:
+                save_logits = None
 
             scores = evaluate(model,
                               task.graph(),
@@ -549,7 +569,8 @@ def main(args):
                               backend=backend,
                               open_learning_model=olg_model,
                               known_classes=known_classes,
-                              unseen_classes=unseen_classes)
+                              unseen_classes=unseen_classes,
+                              save_logits=save_logits)
 
         # print(f"[{current_year} ~ Epoch {epochs}] Test Accuracy: {acc:.4f}")
         print(f"[{current_year} ~ Epoch {epochs}] Scores: {scores}")
@@ -684,6 +705,7 @@ if __name__ == '__main__':
     parser.add_argument("--evaluate_saint_on_cpu", default=False, action='store_true', help="Run the eval step of GraphSAINT on CPU")
     parser.add_argument('--comment', type=str, default='', help="Some comment for logging purposes.")
     parser.add_argument('--label_rate', type=float, default=None, help="Label rate (needs to be preprocessed)")
+    parser.add_argument('--save_logits_dir', default=None, help="Save logits and targets for each task")
     add_node2vec_args(parser)
 
     open_learning.add_args(parser)

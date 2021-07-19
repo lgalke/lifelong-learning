@@ -5,7 +5,7 @@ NLAYERS=1
 BACKEND="dgl"
 ARGS="--n_layers $NLAYERS --weight_decay 0 --dropout 0.5 --rescale_lr 1.0 --rescale_wd 1. --annual_epochs $ANNUAL_EPOCHS --backend $BACKEND"
 PRETRAIN_ARGS="--t_start $YEAR --initial_epochs $ANNUAL_EPOCHS"
-OUTFILE="results/open_DOC-fixed-threshold.csv"
+OUTFILE="results/open_DOC_fixed-threshold.csv"
 
 # Exit on error
 set -e

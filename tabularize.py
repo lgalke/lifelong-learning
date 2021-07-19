@@ -1,4 +1,5 @@
 import argparse
+import math
 import pandas as pd
 pd.set_option('display.max_rows', None)
 import numpy as np
@@ -16,12 +17,31 @@ df = pd.read_csv(args.results_csv_file)
 print("N =", len(df))
 print("Grouping by:", args.groupby)
 groups = df.groupby(args.groupby)
-results = pd.DataFrame(groups[args.score].mean())
-results['SD'] = groups[args.score].std()
-results['SE'] = groups[args.score].std() / np.sqrt(groups[args.score].count())
-results['acc-ci95'] = results[args.score].map('{:.4f}'.format) + "+-" + (1.96 * results['SE']).map('{:.2f}'.format)
-results.drop([args.score, 'SD', 'SE'], axis=1, inplace=True)
+
+
+if args.score == 'global_mcc':
+    global_mcc = \
+        (groups['open_tp'].sum() * groups['open_tn'].sum()
+         - groups['open_fp'].sum() * groups['open_fn'].sum()) \
+        / np.sqrt(
+            (groups['open_tp'].sum() + groups['open_fp'].sum())
+            * (groups['open_tp'].sum() + groups['open_fn'].sum())
+            * (groups['open_tn'].sum() + groups['open_fp'].sum())
+            * (groups['open_tn'].sum() + groups['open_fn'].sum())
+        )
+
+    results = global_mcc
+
+else:
+    results = pd.DataFrame(groups[args.score].mean())
+    results['SD'] = groups[args.score].std()
+    results['SE'] = groups[args.score].std() / np.sqrt(groups[args.score].count())
+    results[args.score+'-ci95'] = results[args.score].map('{:.4f}'.format) + "+-" + (1.96 * results['SE']).map('{:.2f}'.format)
+    results.drop([args.score, 'SD', 'SE'], axis=1, inplace=True)
+
 print(results)
+if args.latex:
+    print(results.to_latex())
 if args.save:
     print("Saving aggregated results to:", args.save)
     if args.latex:
