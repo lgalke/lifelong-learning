@@ -67,7 +67,7 @@ def train(model, optimizer, g, feats, labels, mask=None, epochs=1,
         model.__reset_cache__()
 
     if mask is not None:
-        # Reduce view alreayd here rather than in each epoch (prevent bugs)
+        # Reduce view alredy here rather than in each epoch (prevent bugs)
         labels = labels[mask]
 
     for epoch in range(epochs):

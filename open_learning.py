@@ -7,6 +7,7 @@ from sklearn.metrics import matthews_corrcoef, f1_score
 
 import torch
 from torch.nn import Module
+from torch.nn.functional import binary_cross_entropy
 
 
 class OpenLearning(Module, ABC):
@@ -48,7 +49,7 @@ class DeepOpenClassification(OpenLearning):
     """
     def __init__(self, threshold: float = 0.5,
                  reduce_risk: bool = False, alpha: float = 3.0,
-                 num_classes=None, **kwargs):
+                 num_classes=None, use_class_weights=False):
         """
         Arguments
         ---------
@@ -57,21 +58,39 @@ class DeepOpenClassification(OpenLearning):
         **kwargs: will be passed to BCEWithLogitsLoss
         """
         super().__init__()
-        self.criterion = torch.nn.BCEWithLogitsLoss(**kwargs)
         self.reduce_risk = bool(reduce_risk)
         self.alpha = float(alpha)
         self.threshold = float(threshold)
 
         self.num_classes = num_classes
 
+        self.use_class_weights = use_class_weights
+
         # Minimum threshold if reduce_risk is True,
         # allows to call fit() multiple times
         self.min_threshold = threshold
 
     def loss(self, logits, labels):
+        if self.use_class_weights:
+            with torch.no_grad():
+                values, counts = torch.unique(labels,
+                                              return_counts=True)
+                total = counts.sum()
+                # Neg examples / positive examples *per class*
+                pos_weights = (total - counts) / counts
+
+                # Default zero, but doesnt matter, as never seen.
+                pos_weights = torch.zeros(self.num_classes, dtype=torch.float)
+                pos_weights[values] = pos_weights
+        else:
+            pos_weights = None
+
+        criterion = torch.nn.BCEWithLogitsLoss(reduction='mean',
+                                               pos_weights=pos_weights)
         targets = torch.nn.functional.one_hot(labels,
                                               num_classes=logits.size(1))
-        return self.criterion(logits, targets.float())
+
+        return criterion(logits, targets.float())
 
     def fit(self, logits, labels):
         """ Gaussian fitting of the thresholds per class.
@@ -176,6 +195,9 @@ def add_args(parser):
                         help="Reduce Open Space Risk by Gaussian-fitting")
     parser.add_argument('--doc_alpha', default=3.0,
                         help="Alpha for DOC")
+    parser.add_argument('--doc_class_weights', default=False,
+                        action='store_true',
+                        help="Use class weights against class imbalance")
 
 
 def build(args, num_classes=None):
@@ -183,7 +205,8 @@ def build(args, num_classes=None):
         return DeepOpenClassification(threshold=args.doc_threshold,
                                       reduce_risk=args.doc_reduce_risk,
                                       alpha=args.doc_alpha,
-                                      num_classes=num_classes)
+                                      num_classes=num_classes,
+                                      use_class_weights=args.doc_class_weights)
     elif args.open_learning == "openmax":
         raise NotImplementedError("OpenMax not yet implemented")
     else:

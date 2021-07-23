@@ -4,9 +4,9 @@ ANNUAL_EPOCHS=200
 NLAYERS=1
 BACKEND="dgl"
 ARGS="--n_layers $NLAYERS --weight_decay 0 --dropout 0.5 --rescale_lr 1.0 --rescale_wd 1. --annual_epochs $ANNUAL_EPOCHS --backend $BACKEND"
-OLG_ARGS="--open_learning doc --doc_threshold 0.5"
+OLG_ARGS="--open_learning doc --doc_threshold 0.5 --doc_class_weights"
 PRETRAIN_ARGS="--t_start $YEAR --initial_epochs $ANNUAL_EPOCHS"
-OUTFILE="results/olg_gat-gs-mlp_hpopt.csv"
+OUTFILE="results/olg_sage_cw_hpopt.csv"
 
 # Exit on error
 set -e
