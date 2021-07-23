@@ -16,23 +16,61 @@ print("Loading data:", args.results_csv_file)
 df = pd.read_csv(args.results_csv_file)
 print("N =", len(df))
 print("Grouping by:", args.groupby)
-groups = df.groupby(args.groupby)
+
 
 
 if args.score == 'global_mcc':
-    global_mcc = \
-        (groups['open_tp'].sum() * groups['open_tn'].sum()
-         - groups['open_fp'].sum() * groups['open_fn'].sum()) \
-        / np.sqrt(
-            (groups['open_tp'].sum() + groups['open_fp'].sum())
-            * (groups['open_tp'].sum() + groups['open_fn'].sum())
-            * (groups['open_tn'].sum() + groups['open_fp'].sum())
-            * (groups['open_tn'].sum() + groups['open_fn'].sum())
-        )
+    # Compute Global MCC per seed first
+    # groups = df.groupby(args.groupby + ['seed'])
+    groups = df.groupby(args.groupby)
 
+    tp = groups['open_tp'].sum().astype(np.float64)
+    tn = groups['open_tn'].sum().astype(np.float64)
+    fp = groups['open_fp'].sum().astype(np.float64)
+    fn = groups['open_fn'].sum().astype(np.float64)
+    print('tp', tp)
+    print('tn', tn)
+    print('fp', fp)
+    print('fn', fn)
+
+    # Alternate computation, avoiding NaNs
+
+    # PPV = tp / (tp + fp)                    # <-- NaN with t=0
+    # TPR = tp / (tp + fn)
+    # TNR = tn / (tn + fp)
+    # NPV = tn / (tn + fn)
+
+    # FDR = fp / (fp + tp)  # 1 - TNR         # <-- NaN with t=0
+    # FNR = fn / (fn + tp)  # 1 - TPR
+    # FPR = fp / (fp + tn)  # 1 - TNR
+    # FOR = fn / (fn + tn)  # 1 - NPV
+
+    # print("PPV", PPV)
+    # print("TPR", TPR)
+    # print("TNR", TNR)
+    # print("NPV", NPV)
+
+    # print("FDR", FDR)
+    # print("FNR", FNR)
+    # print("FPR", FPR)
+    # print("FOR", FOR)
+
+    # global_mcc = np.sqrt(PPV) * np.sqrt(TPR) * np.sqrt(TNR) * np.sqrt(NPV)\
+    #     - np.sqrt(FDR) * np.sqrt(FNR) * np.sqrt(FPR) * np.sqrt(FOR)
+
+
+
+    nominator = tp * tn - fp * fn
+    # print("nom", nominator)
+    denominator = (tp + fp) * (tp + fn) * (tn + fp) * (tn + fn)
+    # print("denom", denominator)
+    global_mcc = nominator / np.sqrt(denominator)
+
+    # results = global_mcc.groupby(args.groupby).mean()
     results = global_mcc
 
 else:
+    groups = df.groupby(args.groupby)
     results = pd.DataFrame(groups[args.score].mean())
     results['SD'] = groups[args.score].std()
     results['SE'] = groups[args.score].std() / np.sqrt(groups[args.score].count())
