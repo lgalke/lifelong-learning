@@ -75,18 +75,27 @@ class DeepOpenClassification(OpenLearning):
             with torch.no_grad():
                 values, counts = torch.unique(labels,
                                               return_counts=True)
+                # print("Num classes", self.num_classes)
+                # print("Values", values)
+                # print("Values.shape", values.shape)
+                # print("Counts", counts)
+                # print("Counts", counts.shape)
                 total = counts.sum()
                 # Neg examples / positive examples *per class*
-                pos_weights = (total - counts) / counts
+                class_weights = (total - counts) / counts
+
+                # print("Pos Weights", counts.shape)
+                # print("Pos Weights.shape", counts.shape)
 
                 # Default zero, but doesnt matter, as never seen.
-                pos_weights = torch.zeros(self.num_classes, dtype=torch.float)
-                pos_weights[values] = pos_weights
+                pos_weight = torch.zeros(self.num_classes,
+                                          device=class_weights.device)
+                pos_weight[values] = class_weights
         else:
-            pos_weights = None
+            pos_weight = None
 
         criterion = torch.nn.BCEWithLogitsLoss(reduction='mean',
-                                               pos_weights=pos_weights)
+                                               pos_weight=pos_weight)
         targets = torch.nn.functional.one_hot(labels,
                                               num_classes=logits.size(1))
 
