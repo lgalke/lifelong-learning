@@ -28,10 +28,10 @@ if args.score == 'global_mcc':
     tn = groups['open_tn'].sum().astype(np.float64)
     fp = groups['open_fp'].sum().astype(np.float64)
     fn = groups['open_fn'].sum().astype(np.float64)
-    print('tp', tp)
-    print('tn', tn)
-    print('fp', fp)
-    print('fn', fn)
+    # print('tp', tp)
+    # print('tn', tn)
+    # print('fp', fp)
+    # print('fn', fn)
 
     # Alternate computation, avoiding NaNs
 

@@ -9,6 +9,8 @@ import torch
 from torch.nn import Module
 from torch.nn.functional import binary_cross_entropy
 
+from scipy.stats import entropy
+
 
 class OpenLearning(Module, ABC):
     """ Abstract base class for open world learning """
@@ -185,6 +187,93 @@ class DeepOpenClassification(OpenLearning):
         return max_indices
 
 
+class EntropyMethod(OpenLearning):
+    """
+    Deep Open ClassificatioN: Sigmoidal activation + Threshold based rejection
+    Inputs should *not* be activated in any way.
+    This module will apply sigmoid activations.
+    """
+    def __init__(self, threshold: float = 0.5, num_classes=None, use_class_weights=False):
+        """
+        Arguments
+        ---------
+        threshold: Threshold for class rejection
+        alpha: Factor of standard deviation to reduce open space risk
+        **kwargs: will be passed to BCEWithLogitsLoss
+        """
+        super().__init__()
+        self.threshold = float(threshold)
+        self.num_classes = num_classes
+        self.use_class_weights = use_class_weights
+
+    def loss(self, logits, labels):
+        if self.use_class_weights:
+            with torch.no_grad():
+                values, counts = torch.unique(labels,
+                                              return_counts=True)
+                # print("Num classes", self.num_classes)
+                # print("Values", values)
+                # print("Values.shape", values.shape)
+                # print("Counts", counts)
+                # print("Counts", counts.shape)
+                total = counts.sum()
+                # Neg examples / positive examples *per class*
+                class_weights = (total - counts) / counts
+
+                # print("Pos Weights", counts.shape)
+                # print("Pos Weights.shape", counts.shape)
+
+                # Default zero, but doesnt matter, as never seen.
+                pos_weight = torch.zeros(self.num_classes,
+                                          device=class_weights.device)
+                pos_weight[values] = class_weights
+        else:
+            pos_weight = None
+
+        criterion = torch.nn.BCEWithLogitsLoss(reduction='mean',
+                                               pos_weight=pos_weight)
+        targets = torch.nn.functional.one_hot(labels,
+                                              num_classes=logits.size(1))
+
+        return criterion(logits, targets.float())
+
+    def fit(self, logits, labels):
+        """ Hook to be called on the full training set after actual training,
+        but before evaluation!
+        """
+        return self
+
+    def reject(self, logits, subset=None):
+        with torch.no_grad():
+            if subset is not None:
+                logits = logits[:, subset]
+
+            base = logits.size(1)
+
+            sigmoids = logits.sigmoid()
+
+            # Use #outputs as base of logit to normalize between 0 and 1
+            y_proba = entropy(logits, base=base, axis=1)
+
+            # Reject classification where logit entropy is higher than threshold
+            reject_mask = (y_proba > self.threshold)
+        return reject_mask
+
+    def predict(self, logits, subset=None):
+        with torch.no_grad():
+            if subset is not None:
+                print(f"Reducing view to {len(subset)} known classes")
+                logits = logits[:, subset]
+
+            print("Logits\n", logits)
+            y_proba = logits.sigmoid()
+            print("Logits after sigmoid\n", y_proba)
+
+            # Basic argmax
+            __max_vals, max_indices = torch.max(y_proba, dim=1)
+        return max_indices
+
+
 class OpenMax(OpenLearning):
     pass
 
@@ -196,7 +285,7 @@ class OpenMax(OpenLearning):
 def add_args(parser):
     parser.add_argument('--open_learning', default=None,
                         help="Method for self detection of unseen classes",
-                        choices=["doc"])
+                        choices=["doc", "entropy"])
     parser.add_argument('--doc_threshold', default=0.5, type=float,
                         help="Threshold for DOC")
     parser.add_argument('--doc_reduce_risk',
@@ -205,6 +294,11 @@ def add_args(parser):
     parser.add_argument('--doc_alpha', default=3.0,
                         help="Alpha for DOC")
     parser.add_argument('--doc_class_weights', default=False,
+                        action='store_true',
+                        help="Use class weights against class imbalance")
+    parser.add_argument('--entropy_threshold', default=0.5, type=float,
+                        help="Threshold for entropy rejection method")
+    parser.add_argument('--entropy_class_weights', default=False,
                         action='store_true',
                         help="Use class weights against class imbalance")
 
@@ -216,6 +310,11 @@ def build(args, num_classes=None):
                                       alpha=args.doc_alpha,
                                       num_classes=num_classes,
                                       use_class_weights=args.doc_class_weights)
+    elif args.open_learning == 'entropy':
+        return EntropyMethod(threshold=args.entropy_threshold, 
+                             num_classes=num_classes,
+                             use_class_weights=args.entropy_class_weights)
+
     elif args.open_learning == "openmax":
         raise NotImplementedError("OpenMax not yet implemented")
     else:
@@ -265,8 +364,6 @@ def evaluate(labels, unseen_classes,
     # MCC
     mcc = matthews_corrcoef(bool2pmone(true_reject),
                             bool2pmone(reject_mask))
-
-
 
     # Open F1 Macro
     labels[true_reject] = -100
