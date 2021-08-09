@@ -5,7 +5,7 @@ NLAYERS=1
 BACKEND="dgl"
 ARGS="--n_layers $NLAYERS --weight_decay 0 --dropout 0.5 --rescale_lr 1.0 --rescale_wd 1. --annual_epochs $ANNUAL_EPOCHS --backend $BACKEND"
 PRETRAIN_ARGS="--t_start $YEAR --initial_epochs $ANNUAL_EPOCHS"
-OUTFILE="results/open_DOC_CW_risk-reduction.csv"
+OUTFILE="results/open_DOC_CW_risk-reduction_tau75.csv"
 
 # Exit on error
 set -e
@@ -22,11 +22,14 @@ HPARAMS=(
 )
 
 OLG_ARGS=(
-	"--open_learning doc --doc_threshold 0.5 --doc_reduce_risk --doc_alpha 3.0 --doc_class_weights"
-	"--open_learning doc --doc_threshold 0.5 --doc_reduce_risk --doc_alpha 1.5 --doc_class_weights"
-	"--open_learning doc --doc_threshold 0.25 --doc_reduce_risk --doc_alpha 1.5 --doc_class_weights"
-	"--open_learning doc --doc_threshold 0.0 --doc_reduce_risk --doc_alpha 1.5 --doc_class_weights"
-	"--open_learning doc --doc_threshold 0.1 --doc_reduce_risk --doc_alpha 1.5 --doc_class_weights"
+	# "--open_learning doc --doc_threshold 0.5 --doc_reduce_risk --doc_alpha 3.0 --doc_class_weights"
+	# "--open_learning doc --doc_threshold 0.5 --doc_reduce_risk --doc_alpha 1.5 --doc_class_weights"
+	# "--open_learning doc --doc_threshold 0.25 --doc_reduce_risk --doc_alpha 1.5 --doc_class_weights"
+	# "--open_learning doc --doc_threshold 0.0 --doc_reduce_risk --doc_alpha 1.5 --doc_class_weights"
+	# "--open_learning doc --doc_threshold 0.1 --doc_reduce_risk --doc_alpha 1.5 --doc_class_weights"
+	# "--open_learning doc --doc_threshold 0.75 --doc_reduce_risk --doc_alpha 1.5 --doc_class_weights"
+	# "--open_learning doc --doc_threshold 0.75 --doc_reduce_risk --doc_alpha 3.0 --doc_class_weights"
+	"--open_learning doc --doc_threshold 0.75 --doc_alpha 999 --doc_class_weights"
 )
 
 for SEED in 10 11 12 13 14; do

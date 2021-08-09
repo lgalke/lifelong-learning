@@ -5,7 +5,7 @@ NLAYERS=1
 BACKEND="dgl"
 ARGS="--n_layers $NLAYERS --weight_decay 0 --dropout 0.5 --rescale_lr 1.0 --rescale_wd 1. --annual_epochs $ANNUAL_EPOCHS --backend $BACKEND"
 PRETRAIN_ARGS="--t_start $YEAR --initial_epochs $ANNUAL_EPOCHS"
-OUTFILE="results/open_DOC_fixed-threshold.csv"
+OUTFILE="results/open_DOC_fixed-threshold_tau75.csv"
 
 # Exit on error
 set -e
@@ -22,7 +22,8 @@ HPARAMS=(
 )
 
 for SEED in 10 11 12 13 14; do
-	for DOC_THRESHOLD in "0.5" "0.25"; do
+	# for DOC_THRESHOLD in "0.5" "0.25" "0.75"; do
+	for DOC_THRESHOLD in "0.75"; do
 		OLG_ARGS="--open_learning doc --doc_threshold $DOC_THRESHOLD"
 		for i in ${!HPARAMS[@]}; do
 			echo "${HPARAMS[$i]}"

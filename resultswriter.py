@@ -100,12 +100,12 @@ class CSVResultsWriter:
                   self.config.doc_reduce_risk,
                   self.config.doc_alpha,
                   self.config.doc_class_weights,
-                  scores['open_tp'],
-                  scores['open_tn'],
-                  scores['open_fp'],
-                  scores['open_fn'],
-                  scores['open_mcc'],
-                  scores['open_f1_macro']
+                  scores.get('open_tp', 0),  # Optional
+                  scores.get('open_tn', 0),
+                  scores.get('open_fp', 0),
+                  scores.get('open_fn', 0),
+                  scores.get('open_mcc', 0),
+                  scores.get('open_f1_macro', 0)
                   ]],
                 columns=RESULT_COLS),
             ignore_index=True)
