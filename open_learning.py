@@ -253,11 +253,11 @@ class EntropyMethod(OpenLearning):
             sigmoids = logits.sigmoid()
 
             # Use #outputs as base of logit to normalize between 0 and 1
-            y_proba = entropy(logits, base=base, axis=1)
+            y_proba = entropy(logits.cpu(), base=base, axis=1)  # numpy array
 
             # Reject classification where logit entropy is higher than threshold
-            reject_mask = (y_proba > self.threshold)
-        return reject_mask
+            reject_mask = (y_proba > self.threshold)  # numpy bool array
+        return torch.as_tensor(reject_mask)  # torch bool array
 
     def predict(self, logits, subset=None):
         with torch.no_grad():
@@ -311,7 +311,7 @@ def build(args, num_classes=None):
                                       num_classes=num_classes,
                                       use_class_weights=args.doc_class_weights)
     elif args.open_learning == 'entropy':
-        return EntropyMethod(threshold=args.entropy_threshold, 
+        return EntropyMethod(threshold=args.entropy_threshold,
                              num_classes=num_classes,
                              use_class_weights=args.entropy_class_weights)
 
