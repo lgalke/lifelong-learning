@@ -109,3 +109,8 @@ If there are any problems with using this repository, feel free to file an issue
 | tabularize.py                     | aggregate results into table                                                |
 | tabularize_forward_transfer.py    | aggregate results into table including Forward Transfer computation         |
 | visualize.py                      | visualize results                                                           |
+
+
+## Notes
+
+- The experiments for inductive vs transductive learning can be found in a different [repository](https://github.com/lgalke/gnn-pretraining-evaluation).
