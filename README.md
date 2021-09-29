@@ -11,7 +11,8 @@
   volume={},
   number={},
   pages={1-8},
-  doi={10.1109/IJCNN52387.2021.9533412}}
+  doi={10.1109/IJCNN52387.2021.9533412}
+}
 ```
 
 ## Installation
