@@ -2,21 +2,21 @@ DATA="dblp-hard"
 YEAR=2004
 ANNUAL_EPOCHS=200
 NLAYERS=1
-BACKEND="geometric"
+BACKEND="dgl"
 ARGS="--n_layers $NLAYERS --weight_decay 0 --dropout 0.5 --rescale_lr 1.0 --rescale_wd 1. --annual_epochs $ANNUAL_EPOCHS --backend $BACKEND"
 PRETRAIN_ARGS="--t_start $YEAR --initial_epochs $ANNUAL_EPOCHS"
-OUTFILE="results/revision-results/open_DOC_CW_fixed-threshold-with-SGC-base-full-hist.csv"
+OUTFILE="results/revision-results/open_DOC_CW_fixed-threshold-with-GAT-base.csv"
 
 # Exit on error
 set -e
 
 HPARAMS=(
-#	"--history 1 --start cold --lr 0.01"
-#	"--history 1 --start warm --lr 0.005"
-#	"--history 3 --start cold --lr 0.01"
-#	"--history 3 --start warm --lr 0.005"
-#	"--history 6 --start cold --lr 0.01"
-#	"--history 6 --start warm --lr 0.005"
+	"--history 1 --start cold --lr 0.005"
+	"--history 1 --start warm --lr 0.001"
+	"--history 3 --start cold --lr 0.005"
+	"--history 3 --start warm --lr 0.001"
+	"--history 6 --start cold --lr 0.01"
+	"--history 6 --start warm --lr 0.005"
 	"--history 25 --start cold --lr 0.01"
 	"--history 25 --start warm --lr 0.01"
 )
