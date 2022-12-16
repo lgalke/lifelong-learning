@@ -2,6 +2,8 @@ import os
 import os.path as osp
 from datasets import load_data
 import matplotlib.pyplot as plt
+
+plt.rcParams.update({"font.size": 16})
 import numpy as np
 import pandas as pd
 import argparse
@@ -10,19 +12,31 @@ from operator import itemgetter
 import dgl
 from dgl.data import register_data_args, load_data as load_data_dgi
 
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('path', help="Path to 70company-like dataset")
-    parser.add_argument('--outfile', help="Path to 70company-like dataset",
-                        default='./figures/degree.png')
-    parser.add_argument('--dmin', help="Custom min degree for computing power law exp, defaults to min value from data",
-                        default=None, type=int)
-    parser.add_argument('--remove-self-loops', help="Remove self loops",
-                        default=False, action='store_true')
+    parser.add_argument("path", help="Path to 70company-like dataset")
+    parser.add_argument(
+        "--outfile",
+        help="Path to 70company-like dataset",
+        default="./figures/degree.png",
+    )
+    parser.add_argument(
+        "--dmin",
+        help="Custom min degree for computing power law exp, defaults to min value from data",
+        default=None,
+        type=int,
+    )
+    parser.add_argument(
+        "--remove-self-loops",
+        help="Remove self loops",
+        default=False,
+        action="store_true",
+    )
 
     args = parser.parse_args()
 
-    try: 
+    try:
         g, _, _, _ = load_data(args.path)
     except FileNotFoundError:
         print("Trying to load", args.path, "via DGL")
@@ -38,24 +52,25 @@ def main():
 
     plt.figure(1)
 
-    plt.title("Degree distribution")
+    # plt.title("Degree distribution")
 
-    plt.xlabel('degree')
-    plt.xscale('log')
+    plt.xlabel("degree")
+    plt.xscale("log")
     plt.xlim(min(x), max(x))
 
-    plt.ylabel('frequency')
-    plt.yscale('log')
+    plt.ylabel("frequency")
+    plt.yscale("log")
     plt.ylim(min(y), max(y))
 
     # start with straight line
     # plt.plot([min(x), max(x)], [max(y), min(y)], color='r', linestyle='-', linewidth=1.0)
-    # and scatter the distribution 
-    plt.scatter(x, y, marker='.')
-    
+    # and scatter the distribution
+    plt.scatter(x, y, marker=".")
+
+    plt.tight_layout()
+
     print(f"Plotting to {args.outfile}")
     plt.savefig(args.outfile)
-
 
     print("Computing power law exponent")
 
@@ -74,9 +89,5 @@ def main():
     print("Gamma = {:.4f}".format(gamma))
 
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
-
-
-
