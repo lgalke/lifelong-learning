@@ -1,6 +1,19 @@
 # Lifelong Learning of Graph Neural Networks for Open-World Node Classification
 
-**Paper:** Lukas Galke, Benedikt Franke, Tobias Zielke, Ansgar Scherp: **Lifelong Learning of Graph Neural Networks for Open-World Node Classification**, to appear in: IJCNN 2021, [arXiv](https://arxiv.org/abs/2006.14422).
+**Paper:** Lukas Galke, Benedikt Franke, Tobias Zielke, Ansgar Scherp: **Lifelong Learning of Graph Neural Networks for Open-World Node Classification**, IJCNN 2021, IEEE. [arXiv](https://arxiv.org/abs/2006.14422).
+
+```
+@INPROCEEDINGS{galke2021lifelong,
+  author={Galke, Lukas and Franke, Benedikt and Zielke, Tobias and Scherp, Ansgar},
+  booktitle={2021 International Joint Conference on Neural Networks (IJCNN)},
+  title={Lifelong Learning of Graph Neural Networks for Open-World Node Classification},
+  year={2021},
+  volume={},
+  number={},
+  pages={1-8},
+  doi={10.1109/IJCNN52387.2021.9533412}
+}
+```
 
 ## Installation
 
@@ -109,3 +122,8 @@ If there are any problems with using this repository, feel free to file an issue
 | tabularize.py                     | aggregate results into table                                                |
 | tabularize_forward_transfer.py    | aggregate results into table including Forward Transfer computation         |
 | visualize.py                      | visualize results                                                           |
+
+
+## Notes
+
+- The experiments for inductive vs transductive learning can be found in a different [repository](https://github.com/lgalke/gnn-pretraining-evaluation).

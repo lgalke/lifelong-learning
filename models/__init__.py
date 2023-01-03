@@ -4,7 +4,6 @@ from .gat import GAT
 from .mlp import MLP
 from .mostfrequent import MostFrequentClass
 
-
 # Jumping knowledge
 from .jumping_knowledge import JKNet
 
