@@ -5,7 +5,6 @@ import os
 import gc
 
 import numpy as np
-import pandas as pd
 import dgl
 import torch_geometric as tg
 import torch
@@ -24,29 +23,28 @@ from models.sgnet import SGNet
 
 from models.graphsaint import train_saint, evaluate_saint
 from models import geometric as geo
-from models.node2vec import add_node2vec_args, train_node2vec, evaluate_node2vec
+from models.node2vec import (add_node2vec_args,
+                             train_node2vec,
+                             evaluate_node2vec)
 
-from datasets import load_data
+# from datasets import load_data  # unused
 
 from lifelong_learning import lifelong_nodeclf_identifier
 from lifelong_learning import LifelongNodeClassificationDataset
 from lifelong_learning import collate_tasks
 
+from resultswriter import CSVResultsWriter
 
-def appendDFToCSV_void(df, csvFilePath, sep=","):
-    """ Safe appending of a pandas df to csv file
-    Source: https://stackoverflow.com/questions/17134942/pandas-dataframe-output-end-of-csv
-    """
-    if not os.path.isfile(csvFilePath):
-        df.to_csv(csvFilePath, mode='a', index=False, sep=sep)
-    elif len(df.columns) != len(pd.read_csv(csvFilePath, nrows=1, sep=sep).columns):
-        raise Exception(
-            "Columns do not match!! Dataframe has " + str(len(df.columns)) + " columns. CSV file has " + str(
-                len(pd.read_csv(csvFilePath, nrows=1, sep=sep).columns)) + " columns.")
-    elif not (df.columns == pd.read_csv(csvFilePath, nrows=1, sep=sep).columns).all():
-        raise Exception("Columns and column order of dataframe and csv file do not match!!")
-    else:
-        df.to_csv(csvFilePath, mode='a', index=False, sep=sep, header=False)
+import open_learning
+
+try:
+    import wandb
+    USE_WANDB = True
+except ImportError:
+    USE_WANDB = False
+    print("Not using weightsandbiases integration. To use `pip install wandb`")
+
+
 
 
 def compute_weights(ts, exponential_decay, initial_quantity=1.0, normalize=True):
@@ -59,8 +57,8 @@ def compute_weights(ts, exponential_decay, initial_quantity=1.0, normalize=True)
     return values
 
 
-def train(model, optimizer, g, feats, labels, mask=None, epochs=1, weights=None,
-          backend='dgl'):
+def train(model, optimizer, g, feats, labels, mask=None, epochs=1,
+          weights=None, backend='dgl', open_learning_model=None):
     model.train()
     reduction = 'none' if weights is not None else 'mean'
 
@@ -68,13 +66,24 @@ def train(model, optimizer, g, feats, labels, mask=None, epochs=1, weights=None,
         print("Resetting Model Cache")
         model.__reset_cache__()
 
+    if mask is not None:
+        # Reduce view alredy here rather than in each epoch (prevent bugs)
+        labels = labels[mask]
+
     for epoch in range(epochs):
         inputs = (g, feats) if backend == 'dgl' else (feats, g)
-        logits = model(*inputs)
 
+        logits = model(*inputs)
         if mask is not None:
-            loss = F.cross_entropy(logits[mask], labels[mask], reduction=reduction)
+            logits = logits[mask]
+
+        if open_learning_model is not None:
+            # The open learning model defines the loss
+            # print("Logits", logits.size(), logits.dtype)
+            # print("Labels", labels.size(), labels.dtype)
+            loss = open_learning_model.loss(logits, labels)
         else:
+            # Standard cross entropy training
             loss = F.cross_entropy(logits, labels, reduction=reduction)
 
         if weights is not None:
@@ -84,11 +93,25 @@ def train(model, optimizer, g, feats, labels, mask=None, epochs=1, weights=None,
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        print("Epoch {:d} | Loss: {:.4f}".format(epoch + 1, loss.detach().item()))
+
+        myloss = loss.detach().item()
+        myepoch = epoch + 1
+        wandb.log({"epoch": myepoch, "train/loss": myloss})
+        print("\rEpoch {:d} | Loss: {:.4f}".format(myepoch, myloss),
+              flush=True, end='')
+
+    if open_learning_model is not None:
+        print("Fitting Open Learning Model")
+        open_learning_model.fit(logits, labels)
+        print(open_learning_model)
 
 
 def evaluate(model, g, feats, labels, mask=None, compute_loss=True,
-             backend='dgl'):
+             backend='dgl',
+             open_learning_model=None,
+             known_classes: set = None,
+             unseen_classes: set = None,
+             save_logits=None):
     model.eval()
 
     if hasattr(model, '__reset_cache__'):
@@ -99,14 +122,16 @@ def evaluate(model, g, feats, labels, mask=None, compute_loss=True,
         inputs = (g, feats) if backend == 'dgl' else (feats, g)
         logits = model(*inputs)
 
+        # Reduce view on test mask
         if mask is not None:
             logits = logits[mask]
             labels = labels[mask]
 
         if compute_loss:
-            loss = F.cross_entropy(logits, labels).item()
-        else:
-            loss = None
+            if open_learning_model is None:
+                loss = F.cross_entropy(logits, labels).item()
+            else:
+                loss = open_learning_model.loss(logits, labels).item()
 
         if isinstance(logits, np.ndarray):
             logits = torch.FloatTensor(logits)
@@ -114,7 +139,39 @@ def evaluate(model, g, feats, labels, mask=None, compute_loss=True,
         acc = (max_indices == labels).sum().float() / labels.size(0)
         f1 = f1_score(labels.cpu(), max_indices.cpu(), average="macro")
 
-    return acc.item(), f1, loss
+        scores = {
+            'accuracy': acc.item(),
+            'f1_macro': f1,
+            'loss': loss
+        }
+
+        if open_learning_model is not None:
+            subset = torch.LongTensor(list(known_classes))
+            reject_mask = open_learning_model.reject(logits, subset=subset)
+            predictions = open_learning_model.predict(logits, subset=subset)
+            open_scores = open_learning.evaluate(labels, unseen_classes,
+                                                 predictions, reject_mask)
+            scores.update(open_scores)
+
+            if save_logits is not None:
+                print("Saveing logits to", save_logits)
+                os.makedirs(save_logits, exist_ok=True)
+                # Save logits
+                np.savetxt(os.path.join(save_logits, "logits.gz"),
+                           logits.sigmoid().cpu().numpy())
+
+                # Save targets (same way as in open_learning.evaluate)
+                labels_numpy = labels.cpu().clone().numpy()
+                true_reject =  np.isin(labels_numpy, list(unseen_classes))
+                labels_numpy[true_reject] = -100
+                np.savetxt(os.path.join(save_logits, "labels.gz"),
+                           labels_numpy, fmt="%d")
+
+                # verify that we have not modified orig labels
+                assert -100 not in labels, "Data leak. Needs fix"
+
+    # return acc.item(), f1, loss
+    return scores
 
 
 def build_model(args, in_feats, n_hidden, n_classes, device, n_layers=1, backend='geometric'):
@@ -143,7 +200,7 @@ def build_model(args, in_feats, n_hidden, n_classes, device, n_layers=1, backend
                     mode="cat", conv_kwargs={"normalize": False}, backend="geometric").to(device)
         elif model_spec == 'jknet-graphconv':
             model = JKNet(tg.nn.GraphConv, in_feats, n_hidden, n_classes, n_layers, F.relu, args.dropout,
-                    mode="cat", conv_kwargs={"aggr": "mean"}, backend="geometric").to(device)
+                          mode="cat", conv_kwargs={"aggr": "mean"}, backend="geometric").to(device)
         elif model_spec == "sgnet":
             model = geo.SGNet(in_channels=in_feats, out_channels=n_classes, K=n_layers, cached=True).to(device)
         else:
@@ -244,33 +301,21 @@ def restart(model, mode, known_classes: set, new_classes: set):
         raise NotImplementedError("Unknown --start arg: '%s'" % mode)
     return model
 
-RESULT_COLS = ['dataset',
-               'inductive',
-               'seed',
-               'backend',
-               'model',
-               'variant',
-               'n_params',
-               'n_hidden',
-               'n_layers',
-               'dropout',
-               'history',
-               'sampling',
-               'batch_size',
-               'saint_coverage',
-               'limited_pretraining',
-               'initial_epochs',
-               'initial_lr',
-               'initial_wd',
-               'annual_epochs',
-               'annual_lr',
-               'annual_wd',
-               'start',
-               'decay',
-               'year',
-               'epoch',
-               'f1_macro',
-               'accuracy']
+def zero_unseen_classes(model, unseen_classes: set):
+    print(f"Setting params to zero for {len(unseen_classes)} classes")
+    unseen_class_ids = torch.LongTensor(list(unseen_classes))
+    for params in model.final_parameters():
+        if params.dim() == 1:  # bias vector
+            params.data[unseen_class_ids] = -1e12  # big negative bias
+        elif params.dim() == 2:  # weight matrix
+            params.data[unseen_class_ids, :] = 0   # zero weights
+        else:
+            NotImplementedError("Parameter dim > 2 ?")
+
+    return model
+
+
+
 
 
 def main(args):
@@ -281,30 +326,33 @@ def main(args):
 
     print("Using backend:", backend)
 
-    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-
-
-
-    if args.model in ['graphsaint']:
-        print("///////////////////")
-        print("//// inductive ////")
-        print("///////////////////")
-        # Train completely on Task t-1
-        globals_device = torch.device("cpu")
-        assert args.inductive
+    # Device setup
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
     else:
-        print("//////////////////////")
-        print("//// transductive ////")
-        print("//////////////////////")
-        globals_device = device
-        inductive = False
+        device = torch.device("cpu")
+    if args.model == 'mostfrequent':
+        device = torch.device("cpu")
+
+    # LEGACY CODE, not used anymore
+    # if args.model in ['graphsaint']:
+    #     print("///////////////////")
+    #     print("//// inductive ////")
+    #     print("///////////////////")
+    #     # Train completely on Task t-1
+    #     globals_device = torch.device("cpu")
+    #     assert args.inductive
+    # else:
+    #     print("//////////////////////")
+    #     print("//// transductive ////")
+    #     print("//////////////////////")
+    #     globals_device = device
+    #     inductive = False
 
     # Assume preprocessed dataset is in subdir of dataset
-    effective_dataset_path = os.path.join(args.data_path,
-            lifelong_nodeclf_identifier(args.dataset, args.t_start-1, args.history, args.backend))
-
-    print("Expecting preprocessed data at", effective_dataset_path)
-    dataset = LifelongNodeClassificationDataset(effective_dataset_path, inductive=args.inductive)
+    print("Expecting preprocessed data at", args.data_path)
+    dataset = LifelongNodeClassificationDataset(args.data_path,
+                                                inductive=args.inductive)
     print(dataset)
     print(f"[t_min, tmax] = [{dataset.t_min}, {dataset.t_max}]")
     print(f"t_zero in dataset = {dataset.t_zero} (should be the one before t_start)")
@@ -312,13 +360,8 @@ def main(args):
     assert dataset.history_size == args.history, "History sizes do not match"
     assert dataset.backend == args.backend, "Backends do not match"
 
-    if args.model == 'mostfrequent':
-        # Makes no sense to put things on GPU when using simple most frequent classifier
-        device = torch.device("cpu")
-
     n_classes = dataset.num_classes
     in_feats = dataset.num_features
-    n_layers = args.n_layers
     n_hidden = args.n_hidden
 
     model = build_model(args, in_feats, n_hidden, n_classes, device,
@@ -326,53 +369,32 @@ def main(args):
     if args.model == 'gcn_cv_sc':
         # unzip training and inference models
         model, infer_model = model
-
     print(model)
     optimizer = build_optimizer(args, model)
+
+    if USE_WANDB:
+        wandb.watch(model)
+
     num_params = count_params(model) if optimizer is not None else 0
     print("#params:", num_params)
     if args.only_count_params:
         exit(0)
 
-    results_df = pd.DataFrame(columns=RESULT_COLS)
 
-    def attach_score(df, year, epoch, accuracy, f1):
-        """ Partial """
-        return df.append(
-            pd.DataFrame(
-                [[args.dataset,
-                  args.inductive,
-                  args.seed,
-                  backend,
-                  args.model,
-                  args.variant,
-                  num_params,
-                  args.n_hidden,
-                  args.n_layers,
-                  args.dropout,
-                  args.history,
-                  args.sampling,
-                  args.batch_size,
-                  args.saint_coverage,
-                  True,  # Limited pretraining
-                  args.initial_epochs,
-                  args.lr,
-                  args.weight_decay,
-                  args.annual_epochs,
-                  args.lr * args.rescale_lr,
-                  args.weight_decay * args.rescale_wd,
-                  args.start,
-                  args.decay,
-                  year,
-                  epoch,
-                  f1,
-                  accuracy]],
-                columns=RESULT_COLS),
-            ignore_index=True)
+    rw = CSVResultsWriter(args)
 
     known_classes = set()
-    taskloader = torch.utils.data.DataLoader(dataset, shuffle=False, batch_size=1,
-            collate_fn=collate_tasks)
+    all_classes = set(range(dataset.num_classes))
+    taskloader = torch.utils.data.DataLoader(dataset, shuffle=False,
+                                             batch_size=1,
+                                             collate_fn=collate_tasks)
+
+    if args.open_learning is not None:
+        olg_model = open_learning.build(args, num_classes=n_classes)
+        print("Open Learning Model:", olg_model)
+    else:
+        # backward compat
+        olg_model = None
 
     for t, batch in enumerate(taskloader):
         if args.only_first_task and t > 0:
@@ -387,6 +409,11 @@ def main(args):
         current_year = task.task_id
 
         print("Batch:", batch)
+        print("Task:", task)
+        print("Train mask:", task.train_mask.size())
+        print("Test mask:", task.test_mask.size())
+        print("Feats:", task.x.size())
+        print("Labels:", task.y.size())
 
         if args.decay is not None:
             if args.inductive:
@@ -408,9 +435,12 @@ def main(args):
         if args.inductive:
             # Task is used completely for training
             new_classes = set(train_task.y.numpy()) - known_classes
+            # unseen_classes = set(task.y.numpy()) - known_classes - new_classes
         else:
             new_classes = set(task.y[task.train_mask].numpy()) - known_classes
-        print(f"New classes at time {current_year}:", new_classes)
+            # unseen_classes = set(task.y[task.test_mask].numpy()) - known_classes - new_classes
+
+        print(f"New classes at train time {current_year}:", new_classes)
 
         # Perform a restart (beginning with 2nd task)
         if t > 0:
@@ -418,20 +448,31 @@ def main(args):
         # Add new classes to known classes
         known_classes |= new_classes
 
+        # All classes that are not in the training set of t are unseen
+        unseen_classes = all_classes - known_classes
+        print(f"Unseen classes at test time {current_year}:", unseen_classes)
+
+        test_loss = None  # fall-back if evaluate model doesn't emit loss
+
         if args.model == 'mostfrequent':
+            assert args.subsample_train is None, "MostFrequent not impl. for subsample train"
+            assert args.open_learning is None, "Open Learning not impl. for mostfrequent"
             assert args.inductive
             if epochs > 0:
                 # Re-fit only if uptraining is in general allowed!
                 model.fit(None, train_task.y)
             del train_task
-            acc, f1, _ = evaluate(model,
+            scores = evaluate(model,
                               task.graph(),
                               task.x,
                               task.y,
                               mask=task.test_mask,
                               compute_loss=False)
+            acc, f1 = scores['accuracy'], scores['f1_macro']
         elif args.model == 'node2vec':
-            assert not args.inductive
+            assert args.subsample_train is None, "MostFrequent not impl. for subsample train"
+            assert not args.inductive, "Node2vec can only be applied transductively"
+            assert args.open_learning is None, "Open Learning not impl. for node2vec"
             train_node2vec(model, optimizer, epochs=epochs,
                            batch_size=args.n2v_batch_size,
                            shuffle=True,
@@ -439,8 +480,10 @@ def main(args):
             acc = evaluate_node2vec(model, task.y, task.train_mask, task.test_mask)
 
         elif args.model == "graphsaint":
-            assert args.inductive
             # DON'T shift to GPU for graphsaint, it WILL fail
+            assert args.inductive, "GraphSAINT is only implemented for the inductive case"
+            assert args.subsample_train is None, "Subsample Train (label rate) not impl. for GraphSAINT"
+            assert args.open_learning is None, "Open Learning not impl. for GraphSAINT"
             train_saint(model,
                         optimizer,
                         train_task.graph(),
@@ -464,18 +507,20 @@ def main(args):
             else:
                 task = task.to(device)
                 # Shift model to CPU
-            acc, f1, _ = evaluate_saint(model,
+            acc, f1, test_loss = evaluate_saint(model,
                                     task.graph(),
                                     task.x,
                                     task.y,
                                     mask=task.test_mask,
-                                    compute_loss=False)
+                                    compute_loss=True)
             if args.evaluate_saint_on_cpu:
+                # Shift model back to gpu
                 model = model.to(device)
             gc.collect()
             torch.cuda.empty_cache()
         else:
-            if inductive:
+            if args.inductive:
+                assert args.subsample_train is None, "Inductive not impl. for subsample train"
                 # Train on t-1
                 train_task = train_task.to(device)
                 train(model,
@@ -486,7 +531,8 @@ def main(args):
                       mask=None,
                       epochs=epochs,
                       weights=weights,
-                      backend=backend)
+                      backend=backend,
+                      open_learning_model=olg_model)
                 del train_task
                 gc.collect()
                 torch.cuda.empty_cache()
@@ -494,7 +540,7 @@ def main(args):
             # Put current task on device
             task = task.to(device)
 
-            if not inductive:
+            if not args.inductive:
                 # Train on train_mask of current task
                 train(model,
                       optimizer,
@@ -504,23 +550,54 @@ def main(args):
                       mask=task.train_mask,
                       epochs=epochs,
                       weights=weights,
-                      backend=backend)
+                      backend=backend,
+                      open_learning_model=olg_model)
 
-            acc, f1, _ = evaluate(model,
+            # acc, f1, test_loss = evaluate(model,  # <- old
+
+            if args.save_logits_dir is not None:
+                save_logits = os.path.join(args.save_logits_dir, "t%02d" % t)
+            else:
+                save_logits = None
+
+            scores = evaluate(model,
                               task.graph(),
                               task.x,
                               task.y,
                               mask=task.test_mask,
-                              compute_loss=False,
-                              backend=backend)
-        print(f"[{current_year} ~ Epoch {epochs}] Test Accuracy: {acc:.4f}")
-        results_df = attach_score(results_df, current_year, epochs, acc, f1)
+                              compute_loss=True,
+                              backend=backend,
+                              open_learning_model=olg_model,
+                              known_classes=known_classes,
+                              unseen_classes=unseen_classes,
+                              save_logits=save_logits)
+
+        # print(f"[{current_year} ~ Epoch {epochs}] Test Accuracy: {acc:.4f}")
+        print(f"[{current_year} ~ Epoch {epochs}] Scores: {scores}")
+
+        assert 'year' not in scores
+        assert 'epoch' not in scores
+        scores['task'] = current_year
+        scores['epoch'] = epochs
+
+        # results_df = attach_score(results_df, current_year, epochs, scores)
+
+        rw.add_result(scores)
+
+        if USE_WANDB:
+            # Prefix with 'test/' to improve structure in wandb dashboard
+            log_dict = {'test/'+k: v for k, v in scores.items()}
+            log_dict["task_id"] = current_year
+            log_dict["task_index"] = t
+            wandb.log(log_dict)
+
         # input() # debug purposes
         # DROP ALL STUFF COMPUTED FOR CURRENT WINDOW (no memory leaks)
         del task
         gc.collect()
         torch.cuda.empty_cache()
 
+        # Memory leak debugging, not needed.
         # for obj in gc.get_objects():
         #     try:
         #         if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
@@ -529,9 +606,32 @@ def main(args):
         #         pass
         # input()
 
+    if USE_WANDB:
+        # This makes WandB compute summary metrics for accuracy and f1 macro
+        # including the average!
+        # TODO: be careful when more than one accuracy per task is stored in results
+        # (currently not a problem, as we only store one set of scores per task)
+        wandb.run.summary["test/avg_accuracy"] = rw.data["accuracy"].values.mean()
+        wandb.run.summary["test/sd_accuracy"] = rw.data["accuracy"].values.std(ddof=1)
+        wandb.run.summary["test/avg_f1_macro"] = rw.data["f1_macro"].values.mean()
+        wandb.run.summary["test/sd_f1_macro"] = rw.data["f1_macro"].values.std(ddof=1)
+
+        wandb.run.summary["test/avg_open_f1_macro"] = rw.data["open_f1_macro"].values.mean()
+        wandb.run.summary["test/sd_open_f1_macro"] = rw.data["open_f1_macro"].values.std(ddof=1)
+        wandb.run.summary["test/avg_open_mcc"] = rw.data["open_mcc"].values.mean()
+        wandb.run.summary["test/sd_open_mcc"] = rw.data["open_mcc"].values.std(ddof=1)
+        # wandb.run.summary.update()
+
+        wandb.run.summary["test/open_tp"] = rw.data["open_tp"].values.sum()
+        wandb.run.summary["test/open_tn"] = rw.data["open_tn"].values.sum()
+        wandb.run.summary["test/open_fp"] = rw.data["open_fp"].values.sum()
+        wandb.run.summary["test/open_fn"] = rw.data["open_fn"].values.sum()
+
     if args.save is not None:
         print("Saving final results to", args.save)
-        appendDFToCSV_void(results_df, args.save)
+        # appendDFToCSV_void(results_df, args.save)
+
+        rw.write(args.save)
 
 
 DATASET_PATHS = {
@@ -548,10 +648,10 @@ if __name__ == '__main__':
                                  'egcn', 'gat', 'gcn', 'jknet-sageconv', 'jknet-graphconv', 'graphsaint',
                                  'node2vec', 'sgnet'])
     parser.add_argument('--sampling', type=str, choices=['rw', 'node', 'edge'],
-                        default=None)
+                        default=None, help="Sampling strategy. Only for GraphSAINT")
     parser.add_argument('--variant', type=str, default='',
                         help="Model variant, if model is GraphSAINT, specifies the Geometric base model")
-    parser.add_argument('--dataset', type=str, help="Specify the dataset", choices=list(DATASET_PATHS.keys()),
+    parser.add_argument('--dataset', type=str, help="Specify the dataset", # choices=list(DATASET_PATHS.keys()),
                         default='pharmabio')
     parser.add_argument('--t_start', type=int,
                         help="The first evaluation time step. Default is 2004 for DBLP-{easy,hard} and 1999 for PharmaBio")
@@ -588,7 +688,7 @@ if __name__ == '__main__':
     parser.add_argument('--test_batch_size', type=int, default=10000,
                         help="Test batch size (testing is done on cpu)")
     # parser.add_argument('--limited_pretraining', default=False, action="store_true",
-    #                     help="Perform pretraining on the first history window.") 
+    #                     help="Perform pretraining on the first history window.")
     parser.add_argument('--decay', default=None, type=float, help="Paramater for exponential decay loss smoothing")
     parser.add_argument('--save_intermediate', default=False, action="store_true",
                         help="Save intermediate results per year")
@@ -603,9 +703,18 @@ if __name__ == '__main__':
     parser.add_argument("--only_first_task", default=False, action='store_true', help="Train only on first task (debug purposes)")
     parser.add_argument("--only_count_params", default=False, action='store_true', help="Print number of parameters and exit (debug purposes)")
     parser.add_argument("--evaluate_saint_on_cpu", default=False, action='store_true', help="Run the eval step of GraphSAINT on CPU")
+    parser.add_argument('--comment', type=str, default='', help="Some comment for logging purposes.")
+    parser.add_argument('--label_rate', type=float, default=None, help="Label rate (needs to be preprocessed)")
+    parser.add_argument('--save_logits_dir', default=None, help="Save logits and targets for each task")
     add_node2vec_args(parser)
 
+    open_learning.add_args(parser)
+
     ARGS = parser.parse_args()
+
+    if USE_WANDB:
+        wandb.init(project="lifelong-learning")
+        wandb.config.update(ARGS)
 
 
     if ARGS.initial_epochs is None:
@@ -627,10 +736,14 @@ if __name__ == '__main__':
         print("**************************************************")
 
     # Handle dataset argument to get path to data
+
     try:
-        ARGS.data_path = DATASET_PATHS[ARGS.dataset]
-    except KeyError:
-        print("Dataset key not found, trying to interprete as raw path")
+        dataset_path = DATASET_PATHS[ARGS.dataset]
+
+        preprocessed_dataset_identifier = lifelong_nodeclf_identifier(ARGS.dataset, ARGS.t_start-1, ARGS.history, ARGS.backend, label_rate=ARGS.label_rate)
+        ARGS.data_path = os.path.join(dataset_path, preprocessed_dataset_identifier)
+    except:
+        print(f"Dataset not in dict, assuming preprocessed dataset at: {ARGS.dataset}")
         ARGS.data_path = ARGS.dataset
     print("Using dataset with path:", ARGS.data_path)
 
@@ -644,22 +757,25 @@ if __name__ == '__main__':
             }[ARGS.dataset]
             print("Using t_start =", ARGS.t_start)
         except KeyError:
-            print("No default for dataset '{}'. Please provide '--t_start'.".format(ARGS.dataset))
+            print("No default for dataset '{}'. Please provide '--t_start'."
+                  .format(ARGS.dataset))
             exit(1)
 
     # Backward compatibility:
     # current implementation actually uses 'pretrain_until'
     # as last timestep / year *BEFORE* t_start
-    ARGS.pretrain_until = ARGS.t_start - 1
-
+    # ARGS.pretrain_until = ARGS.t_start - 1
+    # Not needed anymore
 
     # Sanity checks #
     if ARGS.model == 'node2vec':
         # Sanity checks
         if 'warm' in ARGS.start:
-            raise NotImplementedError("Node2vec with warm starts is not yet supported")
+            raise NotImplementedError("Node2vec w/ warm starts not supported")
         else:
             ARGS.start = 'legacy-cold'
             print(f"Using '{ARGS.start}' restart mode for Node2Vec.")
+    elif ARGS.model == 'graphsaint':
+        assert ARGS.inductive, "GraphSAINT only works for inductive mode"
 
     main(ARGS)

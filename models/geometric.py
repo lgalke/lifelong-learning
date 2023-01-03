@@ -39,10 +39,8 @@ class _BasicNet(nn.Module, ABC):
     def forward(self, x, edge_index, edge_norm=None):
         h = x
         for i, layer in enumerate(self.layers):
-            if isinstance(layer, GATConv):
-                h = layer(x=h, edge_index=edge_index, edge_weight=edge_norm)
-            else:
-                h = layer(x=h, edge_index=edge_index)
+            # 2022-12-11, lg: removed edge_weight to comply with new tg version
+            h = layer(x=h, edge_index=edge_index)
             if i < len(self.layers) - 1:
                 h = self.activation(h)
                 h = F.dropout(h, p=self.dropout, training=self.training)

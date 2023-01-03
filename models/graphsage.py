@@ -19,7 +19,7 @@ class GraphSAGE(nn.Module):
                  activation,
                  dropout,
                  aggregator_type):
-        super(GraphSAGE, self).__init__()
+        super().__init__()
         self.layers = nn.ModuleList()
 
         # input layer
