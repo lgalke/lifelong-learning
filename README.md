@@ -1,9 +1,25 @@
 # Lifelong Learning of Graph Neural Networks for Open-World Node Classification
 
-**Paper:** Lukas Galke, Benedikt Franke, Tobias Zielke, Ansgar Scherp: **Lifelong Learning of Graph Neural Networks for Open-World Node Classification**, IJCNN 2021, IEEE. [arXiv](https://arxiv.org/abs/2006.14422).
+## Papers
+
+Lukas Galke, Benedikt Franke, Tobias Zielke, Ansgar Scherp (2021). **Lifelong Learning of Graph Neural Networks for Open-World Node Classification**, In *2021 International Joint Conference on Neural Networks (IJCNN)*, IEEE. [arXiv](https://arxiv.org/abs/2006.14422).
+
+Lukas Galke, Iacopo Vagliano, Benedikt Franke, Tobias Zielke, Marcel Hoffmann, Ansgar Scherp (2023). [Lifelong Learning on Evolving Graphs Under the Constraints of Imbalanced Classes and New Classes](https://authors.elsevier.com/a/1h1SX3BBjKnulZ). *Neural Networks* 164, 156-176.
 
 ```
-@INPROCEEDINGS{galke2021lifelong,
+@article{galke2023lifelong,
+title = {Lifelong learning on evolving graphs under the constraints of imbalanced classes and new classes},
+journal = {Neural Networks},
+volume = {164},
+pages = {156-176},
+year = {2023},
+issn = {0893-6080},
+doi = {https://doi.org/10.1016/j.neunet.2023.04.022},
+url = {https://www.sciencedirect.com/science/article/pii/S0893608023002083},
+author = {Lukas Galke and Iacopo Vagliano and Benedikt Franke and Tobias Zielke and Marcel Hoffmann and Ansgar Scherp}
+}
+
+@inproceedings{galke2021lifelong,
   author={Galke, Lukas and Franke, Benedikt and Zielke, Tobias and Scherp, Ansgar},
   booktitle={2021 International Joint Conference on Neural Networks (IJCNN)},
   title={Lifelong Learning of Graph Neural Networks for Open-World Node Classification},
@@ -13,6 +29,8 @@
   pages={1-8},
   doi={10.1109/IJCNN52387.2021.9533412}
 }
+
+
 ```
 
 ## Installation
