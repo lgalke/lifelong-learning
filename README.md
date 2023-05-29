@@ -29,8 +29,6 @@ Lukas Galke, Benedikt Franke, Tobias Zielke, Ansgar Scherp (2021). [Lifelong Lea
   pages={1-8},
   doi={10.1109/IJCNN52387.2021.9533412}
 }
-
-
 ```
 
 ## Installation
