@@ -8,15 +8,15 @@ Lukas Galke, Benedikt Franke, Tobias Zielke, Ansgar Scherp (2021). [Lifelong Lea
 
 ```
 @article{galke2023lifelong,
-title = {Lifelong learning on evolving graphs under the constraints of imbalanced classes and new classes},
-journal = {Neural Networks},
-volume = {164},
-pages = {156-176},
-year = {2023},
-issn = {0893-6080},
-doi = {https://doi.org/10.1016/j.neunet.2023.04.022},
-url = {https://www.sciencedirect.com/science/article/pii/S0893608023002083},
-author = {Lukas Galke and Iacopo Vagliano and Benedikt Franke and Tobias Zielke and Marcel Hoffmann and Ansgar Scherp}
+  title = {Lifelong learning on evolving graphs under the constraints of imbalanced classes and new classes},
+  journal = {Neural Networks},
+  volume = {164},
+  pages = {156-176},
+  year = {2023},
+  issn = {0893-6080},
+  doi = {https://doi.org/10.1016/j.neunet.2023.04.022},
+  url = {https://www.sciencedirect.com/science/article/pii/S0893608023002083},
+  author = {Lukas Galke and Iacopo Vagliano and Benedikt Franke and Tobias Zielke and Marcel Hoffmann and Ansgar Scherp}
 }
 
 @inproceedings{galke2021lifelong,
