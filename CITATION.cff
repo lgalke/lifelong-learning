@@ -1,23 +1,26 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite the accompanying journal article."
-authors:
-- family-names: "Galke"
-  given-names: "Lukas"
-  orcid: "https://orcid.org/0000-0000-0000-0000"
-- family-names: "Vagliano"
-  given-names: "Iacopo"
-- family-names: "Franke"
-  given-names: "Benedikt"
-- family-names: "Zielke"
-  given-names: "Tobias"
-- family-names: "Hoffmann"
-  given-names: "Marcel"
-- family-names: "Scherp"
-  given-names: "Ansgar"
-title: "Lifelong learning on evolving graphs under the constraints of imbalanced classes and new classes"
-doi: 10.1016/j.neunet.2023.04.022
-date-released: 2023-04-23
-journal: "Neural Networks"
-issn = 0893-6080
-volume: 164
-pages: 156-176
+preferred-citation:
+  type: article
+  authors:
+  - family-names: "Galke"
+    given-names: "Lukas"
+    orcid: "https://orcid.org/0000-0001-6124-1092"
+  - family-names: "Vagliano"
+    given-names: "Iacopo"
+  - family-names: "Franke"
+    given-names: "Benedikt"
+  - family-names: "Zielke"
+    given-names: "Tobias"
+  - family-names: "Hoffmann"
+    given-names: "Marcel"
+  - family-names: "Scherp"
+    given-names: "Ansgar"
+  title: "Lifelong learning on evolving graphs under the constraints of imbalanced classes and new classes"
+  doi: 10.1016/j.neunet.2023.04.022
+  year: 2023
+  journal: "Neural Networks"
+  issn = 0893-6080
+  volume: 164
+  start: 156
+  end: 176
